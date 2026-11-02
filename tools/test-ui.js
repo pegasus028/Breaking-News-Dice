@@ -25,12 +25,11 @@ require('fs').mkdirSync(OUT, { recursive: true });
   const S = await ctx.newPage(); watch(S, 'student');
   await S.setViewportSize({ width: 390, height: 844 });
   await S.goto(BASE + 'student.html?demo');
-  await S.waitForSelector('.names button');
-  await S.screenshot({ path: OUT + '/s1-pick.png' });
-  await S.click('.names button:has-text("Hana")');
   await S.waitForSelector('.teams button');
   await S.screenshot({ path: OUT + '/s2-teams.png' });
   await S.click('.teams button[data-team="12"]');
+  await S.screenshot({ path: OUT + '/s1-pick.png' });
+  await S.click('#enter');
   await S.waitForSelector('text=Waiting for your partner');
 
   // turn on Simulate class
@@ -39,7 +38,7 @@ require('fs').mkdirSync(OUT, { recursive: true });
   await T.click('button[data-x="close"]');
   await T.waitForFunction(() => document.querySelectorAll('.teamcard:not(.half)').length >= 11, null, { timeout: 40000 });
   await T.screenshot({ path: OUT + '/t1-lobby.png' });
-  await S.waitForSelector('text=You are with');
+  await S.waitForSelector('text=Your partner has joined');
   await S.screenshot({ path: OUT + '/s2-desk.png' });
 
   for (let round = 1; round <= 3; round++) {

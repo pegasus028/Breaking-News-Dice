@@ -26,25 +26,33 @@ function bndBotPost(words) {
   return s1 + ' ' + s2;
 }
 
-/* realSids: students being played by a real person in another tab — bots leave them alone. */
-function bndBotsTick(realSids) {
-  realSids = realSids || [];
+/* Pretend players (bot-01 …) join like real students: each fills the first team that is waiting
+   for a partner, otherwise the lowest empty team number. Real players are never touched. */
+function bndBotsTick() {
   var t = bndHandle({ action: 'tstate', pin: '' });
   if (!t.ok || !t.session) return;
   var s = t.session;
-  var real = {};
-  realSids.forEach(function (x) { real[x] = 1; });
-  t.roster.forEach(function (st, idx) {
-    if (real[st.sid] || Math.random() < 0.45) return;          // act a little at a time, like real students
-    var v = bndHandle({ action: 'state', sid: st.sid });
-    if (!v.joined) { if (s.phase === 'lobby' || s.phase === 'paired') bndHandle({ action: 'join', sid: st.sid, device: 'bot-' + st.sid }); return; }
-    if (!v.desk) { bndHandle({ action: 'team', sid: st.sid, team: Math.floor(idx / 2) + 1 }); return; }
-    if (s.phase === 'write' && v.desk) {
-      if (!v.desk.words) { bndHandle({ action: 'roll', sid: st.sid }); return; }
-      if (!v.myPost || !v.myPost.filed) bndHandle({ action: 'save', sid: st.sid, text: bndBotPost(v.desk.words), filed: true });
+  var n = (typeof BND_DEMO_BOTS === 'number') ? BND_DEMO_BOTS : 22;
+  for (var i = 1; i <= n; i++) {
+    if (Math.random() < 0.45) continue;                       // act a little at a time, like real students
+    var id = 'bot-' + (i < 10 ? '0' : '') + i;
+    var v = bndHandle({ action: 'state', sid: id });
+    if (!v.desk) {
+      if (s.phase !== 'lobby' && s.phase !== 'paired') continue;
+      var teams = {};
+      (v.teams || []).forEach(function (x) { teams[x.num] = x.members.length; });
+      var pick = 0;
+      for (var k = 1; k <= v.teamCount && !pick; k++) if (teams[k] === 1) pick = k;
+      for (k = 1; k <= v.teamCount && !pick; k++) if (!teams[k]) pick = k;
+      if (pick) bndHandle({ action: 'team', sid: id, team: pick });
+      continue;
+    }
+    if (s.phase === 'write') {
+      if (!v.desk.words) { bndHandle({ action: 'roll', sid: id }); continue; }
+      if (!v.myPost || !v.myPost.filed) bndHandle({ action: 'save', sid: id, text: bndBotPost(v.desk.words), filed: true });
     }
     if (s.phase === 'verify' && v.task && !v.task.done) {
-      bndHandle({ action: 'check', sid: st.sid, ok: [Math.random() < 0.85, Math.random() < 0.85], stars: 1 + Math.floor(Math.random() * 3) });
+      bndHandle({ action: 'check', sid: id, ok: [Math.random() < 0.85, Math.random() < 0.85], stars: 1 + Math.floor(Math.random() * 3) });
     }
-  });
+  }
 }

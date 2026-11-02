@@ -3,20 +3,14 @@
   var app = document.getElementById('app');
   var topDesk = document.getElementById('topDesk');
   var POLL_MS = BND_LIVE ? 3000 : 1200;
-  var SID_KEY = BND_LIVE ? 'bnd-sid' : 'bnd-demo-sid';
-  var sid = bndStore(SID_KEY);
+  var sid = bndDevice();       // anonymous clientId: no names, like Conditionals Arena
+  var selectedTeam = null;
   var st = null;              // last state from the server
   var screen = '';            // current screen key; re-render only when it changes
   var draft = { text: '', dirty: false, sentAt: 0, round: 0 };
   var verdict = { ok: [null, null], stars: 0 };
   var rolling = false, busy = false, lastError = '';
   var timer = null;
-
-  function demoMarkReal() {
-    if (BND_LIVE || !sid) return;
-    var list = JSON.parse(bndStore('bnd-demo-real') || '[]');
-    if (list.indexOf(sid) < 0) { list.push(sid); bndStore('bnd-demo-real', JSON.stringify(list)); }
-  }
 
   /* ---------------- polling ---------------- */
   function poll() {
@@ -39,8 +33,6 @@
     if (v.saveError && draft.text) lastError = v.saveError;
     var prevPhase = st && st.session && st.session.phase;
     st = v;
-    // a game started (or restarted) after she picked her name: join it automatically, once
-    if (v.session && !v.joined && sid && !autoJoined[v.session.id]) { autoJoined[v.session.id] = 1; join(sid); }
     // writing just closed: send the latest draft straight away
     if (prevPhase === 'write' && v.session && v.session.phase !== 'write' && draft.dirty) {
       bndApi({ action: 'save', sid: sid, text: draft.text, filed: true }).catch(function () {});
@@ -51,12 +43,10 @@
 
   /* ---------------- rendering ---------------- */
   function screenKey() {
-    if (!sid) return 'pick';
     if (!st) return 'loading';
     var s = st.session;
     if (!s) return 'nosession';
-    if (!st.joined) return 'rejoin';
-    if (!st.desk) return 'team-' + JSON.stringify(st.teams || []);
+    if (!st.desk) return 'team-' + s.id;
     if (s.phase === 'lobby' || s.phase === 'paired') return 'paired-' + st.desk.id + '-' + st.desk.members.map(function (m) { return m.sid; }).join('.');
     if (s.phase === 'write') return st.desk.words ? 'write-' + s.round : 'roll-' + s.round;
     if (s.phase === 'verify') return st.task ? (st.task.done ? 'checked-' + s.round : 'check-' + s.round) : 'nocheck-' + s.round;
@@ -70,7 +60,7 @@
     if (key !== screen || force) {
       screen = key;
       var k = key.split('-')[0];
-      var fn = { pick: pickScreen, loading: loadingScreen, nosession: waitScreen, rejoin: rejoinScreen, team: teamScreen,
+      var fn = { loading: loadingScreen, nosession: waitScreen, team: teamScreen,
         paired: pairedScreen, roll: rollScreen, write: writeScreen, check: checkScreen, checked: checkedScreen,
         nocheck: noCheckScreen, reveal: revealScreen, final: finalScreen }[k];
       app.innerHTML = '';
@@ -84,10 +74,10 @@
   }
 
   function renderTop() {
-    if (!st || !st.desk) { topDesk.innerHTML = sid && st && st.me ? '<span>' + bndEsc(st.me.label) + '</span>' : ''; return; }
+    if (!st || !st.desk) { topDesk.innerHTML = ''; return; }
     var d = st.desk;
     var mates = d.members.filter(function (m) { return m.sid !== sid; }).map(function (m) { return m.label; }).join(' & ');
-    topDesk.innerHTML = '<div class="desk"><b>Team ' + d.num + ' \u00b7 ' + bndEsc(d.name) + '</b>' + bndEsc(st.me.label) + (mates ? ' with ' + bndEsc(mates) : '') +
+    topDesk.innerHTML = '<div class="desk"><b>Team ' + d.num + ' \u00b7 ' + bndEsc(d.name) + '</b>' + bndEsc(st.me.label) + (mates ? ' with ' + bndEsc(mates) : ' \u00b7 partner not here yet') +
       '</div><div class="score" aria-label="Team score">' + d.total + '</div>';
   }
 
@@ -111,38 +101,6 @@
 
   function loadingScreen() { app.innerHTML = '<p class="lead">Connecting to the newsroom…</p>'; }
 
-  function pickScreen() {
-    app.innerHTML = head('Who are you?') + '<p class="lead">Tap your name to check in.</p><div class="names" id="names"><p class="muted">Loading names…</p></div>';
-    bndApi({ action: 'roster' }).then(function (r) {
-      var box = document.getElementById('names');
-      if (!box) return;
-      box.innerHTML = r.roster.map(function (p) { return '<button data-sid="' + bndEsc(p.sid) + '">' + bndEsc(p.label) + '</button>'; }).join('');
-      box.onclick = function (e) {
-        var b = e.target.closest('button');
-        if (!b) return;
-        join(b.getAttribute('data-sid'));
-      };
-    }).catch(function () { lastError = 'Cannot reach the game. Check the Wi-Fi and reload.'; render(true); });
-  }
-
-  function join(chosen) {
-    bndApi({ action: 'join', sid: chosen, device: bndDevice() }).then(function (v) {
-      var notStarted = !v.ok && /not started/.test(v.error || '');
-      if (v.ok || notStarted) { sid = chosen; bndStore(SID_KEY, sid); demoMarkReal(); }
-      if (!v.ok) { if (!notStarted) lastError = v.error; else poll(); render(true); return; }
-      apply(v);
-    }).catch(function () { lastError = 'Cannot reach the game. Check the Wi-Fi and try again.'; render(true); });
-  }
-  var autoJoined = {};
-
-  function notMe() {
-    return '<p class="small"><button class="btn" id="notme" style="min-height:40px">Not you? Change name</button></p>';
-  }
-  function bindNotMe() {
-    var b = document.getElementById('notme');
-    if (b) b.onclick = function () { sid = null; bndStore(SID_KEY, null); st = null; screen = ''; render(true); };
-  }
-
   function howTo() {
     return '<div class="card soft"><h3>How it works</h3><ol class="steps">' +
       '<li><b>Roll</b> the dice. Your team gets two flood words.</li>' +
@@ -153,53 +111,64 @@
   }
 
   function waitScreen() {
-    app.innerHTML = head('Waiting for T.Chris') + '<p class="lead">The game has not started yet. This page updates by itself.</p>' + howTo() + notMe();
-    bindNotMe();
+    app.innerHTML = head('Waiting for T.Chris') + '<p class="lead">The game has not started yet. This page updates by itself.</p>' + howTo();
   }
 
-  function rejoinScreen() {
-    app.innerHTML = head('Check in again') + '<p class="lead">A new game has started. Tap below to join it as <b>' + bndEsc(st.me.label) + '</b>.</p>' +
-      '<button class="btn big primary" id="rejoin">Join the new game</button>' + notMe();
-    document.getElementById('rejoin').onclick = function () { join(sid); };
-    bindNotMe();
-  }
-
-  /* ---------- team number (students choose their own pairs) ---------- */
+  /* ---------- join: choose your team number (like Conditionals Arena) ---------- */
   function teamScreen() {
-    var n = st.teamCount || 15, max = st.teamMax || 3, byNum = {};
-    (st.teams || []).forEach(function (t) { byNum[t.num] = t.members; });
-    var late = st.session.round > 0;
+    var n = st.teamCount || 15, byNum = {};
+    (st.teams || []).forEach(function (t) { byNum[t.num] = t.members.length; });
+    selectedTeam = null;
     var h = head('Choose your team number') +
-      '<p class="lead">Tap the <b>same number as your partner</b>. T.Chris tells you your team number.</p>' +
-      (late ? '<p class="small muted">The game has started. Join your team now; you start from the next step.</p>' : '') +
+      '<p class="lead">Two players per team. Tap the <b>same number</b> as your partner. ' +
+      'The <b>first</b> to join is <b>Player 1</b>; the <b>second</b> is <b>Player 2</b>.</p>' +
+      (st.session.round > 0 ? '<p class="small muted">The game has started. Join your team now; you start from the next step.</p>' : '') +
       '<div class="teams" id="teams">';
     for (var i = 1; i <= n; i++) {
-      var mem = byNum[i] || [], full = mem.length >= max;
-      h += '<button data-team="' + i + '"' + (full ? ' disabled' : '') + ' aria-label="Team ' + i + (mem.length ? ', ' + mem.length + ' joined' : '') + '">' +
-        '<b>' + i + '</b><span>' + (mem.length ? mem.map(bndEsc).join(', ') : '&nbsp;') + '</span></button>';
+      var full = (byNum[i] || 0) >= (st.teamMax || 2);
+      h += '<button data-team="' + i + '" class="' + (full ? 'full' : '') + '"' + (full ? ' disabled aria-label="Team ' + i + ', full"' : '') + '>' + i + '</button>';
     }
-    app.innerHTML = h + '</div>' + notMe();
+    h += '</div><div id="joinMsg"></div><button class="btn big primary" id="enter" disabled>Enter the newsroom</button>' + howTo();
+    app.innerHTML = h;
     document.getElementById('teams').onclick = function (e) {
       var b = e.target.closest('button[data-team]');
-      if (!b || busy) return;
-      busy = true;
-      this.querySelectorAll('button').forEach(function (x) { x.disabled = true; });
-      bndApi({ action: 'team', sid: sid, team: Number(b.getAttribute('data-team')) }).then(function (v) {
-        busy = false;
-        if (!v.ok) { lastError = v.error; render(true); poll(); return; }
-        apply(v);
-      }).catch(function () { busy = false; lastError = 'Not joined: no connection. Try again.'; render(true); });
+      if (!b || b.disabled) return;
+      this.querySelectorAll('button').forEach(function (x) { x.classList.toggle('sel', x === b); x.setAttribute('aria-pressed', String(x === b)); });
+      selectedTeam = Number(b.getAttribute('data-team'));
+      document.getElementById('enter').disabled = false;
     };
-    bindNotMe();
+    document.getElementById('enter').onclick = function () {
+      if (!selectedTeam || busy) return;
+      busy = true;
+      var btn = this;
+      btn.disabled = true; btn.textContent = 'Joining\u2026';
+      bndApi({ action: 'join', sid: sid, team: selectedTeam }).then(function (v) {
+        busy = false;
+        if (!v.ok) {
+          btn.textContent = 'Enter the newsroom';
+          document.getElementById('joinMsg').innerHTML = '<div class="err" role="alert">' + bndEsc(v.error) + '</div>';
+          if (v.full) {
+            var fb = document.querySelector('#teams button[data-team="' + selectedTeam + '"]');
+            if (fb) { fb.classList.remove('sel'); fb.classList.add('full'); fb.disabled = true; }
+            selectedTeam = null;
+          } else btn.disabled = false;
+          return;
+        }
+        apply(v);
+      }).catch(function () {
+        busy = false; btn.disabled = false; btn.textContent = 'Enter the newsroom';
+        document.getElementById('joinMsg').innerHTML = '<div class="err" role="alert">Can\u2019t reach the game. Check the Wi-Fi and try again.</div>';
+      });
+    };
   }
 
   function pairedScreen() {
     var d = st.desk;
     var mates = d.members.filter(function (m) { return m.sid !== sid; });
     app.innerHTML = head('Team ' + d.num + ' \u00b7 ' + bndEsc(d.name)) +
-      '<p class="lead">' + (mates.length ? 'You are with <b>' + mates.map(function (m) { return bndEsc(m.label); }).join('</b> and <b>') +
-        '</b>. Sit together and wait for T.Chris to start.'
-        : 'Waiting for your partner to tap Team ' + d.num + '\u2026') + '</p>' +
+      '<p class="lead">You are <b>' + bndEsc(st.me.label) + '</b>.</p>' +
+      (mates.length ? '<div class="card"><b>Your partner has joined.</b> Sit together and wait for T.Chris to start.</div>'
+        : '<div class="card waitbar">Waiting for your partner to join Team ' + d.num + '<span class="dots"><i>.</i><i>.</i><i>.</i></span></div>') +
       '<p><button class="btn" id="leave">Wrong team? Change number</button></p>' + howTo();
     document.getElementById('leave').onclick = function () {
       this.disabled = true;
@@ -413,7 +382,6 @@
 
   /* ---------------- start ---------------- */
   if (!BND_LIVE) document.getElementById('demoNote').classList.remove('hidden');
-  demoMarkReal();
   render(true);
   poll();
   setInterval(poll, POLL_MS);

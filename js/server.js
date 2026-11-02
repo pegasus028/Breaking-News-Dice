@@ -2,14 +2,14 @@
    Runs inside Google Apps Script (copied into apps-script/Code.gs by
    tools/build.js) and, unchanged, in the browser for Demo mode, where
    js/mock-gas.js stands in for SpreadsheetApp, LockService and CacheService.
-   Needs globals from words.js, check.js and a roster file (ROSTER, TEACHER_PIN). */
+   Needs globals from words.js, check.js and a settings file (TEACHER_PIN, SHEET_ID). */
 
 var BND_DESK_NAMES = ['Chao Phraya Chronicle', 'Klong Courier', 'Monsoon Mail', 'Riverside Report',
   'Soi Sentinel', 'Dusit Dispatch', 'Thonburi Times', 'Bang Na Bulletin', 'Silom Standard',
   'Pratunam Post', 'Ari Herald', 'Rama IV Record', 'Lumpini Ledger', 'Rangsit Wire', 'Nonthaburi News',
   'Ayutthaya Advertiser'];
 var BND_TEAM_COUNT = 15;         // team numbers 1–15 on the student screen
-var BND_TEAM_MAX = 3;            // a team is a pair; a trio is allowed
+var BND_TEAM_MAX = 2;            // two players per team, like Conditionals Arena
 var BND_GRACE_MS = 15000;          // late saves accepted this long after a timer ends
 var BND_CACHE_KEY = 'bnd-store-v1';
 
@@ -90,13 +90,12 @@ function bndHandle(req) {
   try {
     var a = req.action;
     if (a === 'ping') return { ok: true, now: Date.now() };
-    if (a === 'roster') return { ok: true, roster: bndRosterPublic_() };
     if (a === 'state') return bndStudentState_(req);
     if (a === 'join') return bndJoin_(req);
     if (a === 'roll') return bndRoll_(req);
     if (a === 'save') return bndSave_(req);
     if (a === 'check') return bndCheck_(req);
-    if (a === 'team') return bndTeam_(req);
+    if (a === 'team') return bndJoin_(req);
     if (a === 'leaveTeam') return bndLeaveTeam_(req);
     // teacher actions
     if (typeof TEACHER_PIN !== 'undefined' && TEACHER_PIN && String(req.pin || '') !== String(TEACHER_PIN)) {
@@ -106,7 +105,6 @@ function bndHandle(req) {
     if (a === 'newSession') return bndNewSession_(req);
     if (a === 'settings') return bndSettings_(req);
     if (a === 'move') return bndMove_(req);
-    if (a === 'release') return bndRelease_(req);
     if (a === 'go') return bndGo_(req);
     if (a === 'extend') return bndExtend_(req);
     if (a === 'front') return bndFront_(req);
@@ -118,20 +116,25 @@ function bndHandle(req) {
   }
 }
 
-/* ---------- roster ---------- */
-function bndRoster_() { return (typeof ROSTER !== 'undefined' && ROSTER) ? ROSTER : []; }
-function bndRosterPublic_() {
-  var r = bndRoster_();
-  var counts = {};
-  r.forEach(function (s) { counts[s.name] = (counts[s.name] || 0) + 1; });
-  return r.map(function (s) {
-    return { sid: String(s.sid), name: s.name, label: counts[s.name] > 1 ? s.name + ' (No. ' + s.sid + ')' : s.name };
-  }).sort(function (x, y) { return x.label.localeCompare(y.label); });
-}
+/* ---------- players ----------
+   No names: a player is an anonymous device id (clientId) known only as
+   "Team n · Player 1/2". The first to tap a team number is Player 1, the second Player 2. */
+var BND_CUR_ = null;               // session last loaded, used for labels
+function bndValidId_(sid) { return /^[A-Za-z0-9_-]{4,64}$/.test(String(sid || '')); }
 function bndLabel_(sid) {
-  var r = bndRosterPublic_();
-  for (var i = 0; i < r.length; i++) if (r[i].sid === String(sid)) return r[i].label;
-  return 'No. ' + sid;
+  var p = BND_CUR_ && BND_CUR_.players[String(sid)];
+  return 'Player ' + ((p && p.role) || 1);
+}
+function bndFullLabel_(sid) {
+  var d = BND_CUR_ && bndDeskOf_(BND_CUR_, sid);
+  return (d ? 'Team ' + d.num + ' \u00b7 ' : '') + bndLabel_(sid);
+}
+function bndNextRole_(s, desk) {
+  var taken = {};
+  desk.members.forEach(function (m) { if (s.players[m]) taken[s.players[m].role] = 1; });
+  var r = 1;
+  while (taken[r]) r++;
+  return r;
 }
 
 /* ---------- session ---------- */
@@ -143,7 +146,7 @@ function bndBlankSession_(settings) {
     phaseEnds: 0, players: {}, desks: [], rolls: {}, assign: {}, front: {}, spiked: {}
   };
 }
-function bndSession_(db) { return db.map.session || null; }
+function bndSession_(db) { BND_CUR_ = db.map.session || null; return BND_CUR_; }
 
 function bndNewSession_(req) {
   return bndWithLock_(function (db) {
@@ -192,47 +195,34 @@ function bndTidyDesks_(s) {
 }
 
 /* ---------- student actions ---------- */
+/* Tap a team number and Enter: claims Player 1 or Player 2 on that team (two players max). */
 function bndJoin_(req) {
   var sid = String(req.sid || '');
-  if (!bndRoster_().some(function (r) { return String(r.sid) === sid; })) return { ok: false, error: 'Unknown name.' };
+  if (!bndValidId_(sid)) return { ok: false, error: 'Reload the page and try again.' };
+  var n = Math.floor(Number(req.team));
+  if (!(n >= 1 && n <= BND_TEAM_COUNT)) return { ok: false, error: 'Pick a team number.' };
   return bndWithLock_(function (db) {
     var s = bndSession_(db);
     if (!s) return { ok: false, error: 'The game has not started yet. Wait for T.Chris.' };
-    var p = s.players[sid];
-    if (p && p.device && req.device && p.device !== req.device) {
-      return { ok: false, error: 'This name is already signed in on another device. Ask T.Chris to release it.' };
-    }
-    s.players[sid] = { joined: p ? p.joined : Date.now(), device: req.device || (p && p.device) || '' };
-    bndWrite_(db, 'session', s);
-    return bndStudentView_(db, sid);
-  });
-}
-
-/* Student taps a team number; two students with the same number are partners. */
-function bndTeam_(req) {
-  var sid = String(req.sid || '');
-  var n = Math.floor(Number(req.team));
-  if (!(n >= 1 && n <= BND_TEAM_COUNT)) return { ok: false, error: 'Choose a team number from 1 to ' + BND_TEAM_COUNT + '.' };
-  return bndWithLock_(function (db) {
-    var s = bndSession_(db);
-    if (!s || !s.players[sid]) return { ok: false, error: 'Tap your name first.' };
     var from = bndDeskOf_(s, sid);
     if (from && from.num === n) return bndStudentView_(db, sid);
     if (from && s.round > 0) return { ok: false, error: 'Teams are locked once the game starts. Ask T.Chris to move you.' };
     var to = bndDeskByNum_(s, n);
     if (to.members.length >= BND_TEAM_MAX) {
       bndTidyDesks_(s);
-      return { ok: false, error: 'Team ' + n + ' is full. Check your team number with T.Chris.' };
+      return { ok: false, full: true, error: 'Team ' + n + ' already has two players. Please choose a different team.' };
     }
     if (from) from.members = from.members.filter(function (m) { return m !== sid; });
+    var role = bndNextRole_(s, to);
     to.members.push(sid);
+    s.players[sid] = { joined: Date.now(), role: role };
     bndTidyDesks_(s);
     bndWrite_(db, 'session', s);
     return bndStudentView_(db, sid);
   });
 }
 
-/* Leave a team before the game starts (to pick another number). */
+/* Leave the team before the game starts (to pick another number). */
 function bndLeaveTeam_(req) {
   var sid = String(req.sid || '');
   return bndWithLock_(function (db) {
@@ -241,6 +231,7 @@ function bndLeaveTeam_(req) {
     if (!from) return bndStudentView_(db, sid);
     if (s.round > 0) return { ok: false, error: 'Teams are locked once the game starts. Ask T.Chris to move you.' };
     from.members = from.members.filter(function (m) { return m !== sid; });
+    delete s.players[sid];
     bndTidyDesks_(s);
     bndWrite_(db, 'session', s);
     return bndStudentView_(db, sid);
@@ -344,25 +335,17 @@ function bndMove_(req) {
     var sid = String(req.sid);
     var from = bndDeskOf_(s, sid);
     if (from) from.members = from.members.filter(function (m) { return m !== sid; });
+    var to = null;
     if (req.desk === 'new') {
       var n = 1;
       while (n <= BND_TEAM_COUNT && s.desks.some(function (d) { return d.num === n; })) n++;
-      bndDeskByNum_(s, n).members.push(sid);
+      to = bndDeskByNum_(s, n);
     } else if (req.desk) {
-      var to = s.desks.filter(function (d) { return d.id === req.desk; })[0];
-      if (to) to.members.push(sid);
+      to = s.desks.filter(function (d) { return d.id === req.desk; })[0];
     }
+    if (to) { s.players[sid] = s.players[sid] || { joined: Date.now() }; s.players[sid].role = bndNextRole_(s, to); to.members.push(sid); }
     bndTidyDesks_(s);
     bndWrite_(db, 'session', s);
-    return bndTeacherState_(db);
-  });
-}
-
-function bndRelease_(req) {
-  return bndWithLock_(function (db) {
-    var s = bndSession_(db);
-    var p = s && s.players[String(req.sid)];
-    if (p) { p.device = ''; bndWrite_(db, 'session', s); }
     return bndTeacherState_(db);
   });
 }
@@ -462,7 +445,7 @@ function bndExport_() {
   var db = bndRead_(false);
   var s = bndSession_(db);
   var sc = bndScores_(db);
-  var rows = [['Round', 'Desk', 'Student', 'Word 1', 'Word 2', 'Post', 'Words', 'Passive', 'Auto', 'Peer', 'Stars', 'Front page', 'Score']];
+  var rows = [['Round', 'Team', 'Player', 'Word 1', 'Word 2', 'Post', 'Words', 'Passive', 'Auto', 'Peer', 'Stars', 'Front page', 'Score']];
   Object.keys(sc.posts).forEach(function (k) {
     var p = db.map[k], b = sc.posts[k];
     var desk = s.desks.filter(function (d) { return d.id === p.desk; })[0];
@@ -615,12 +598,12 @@ function bndFrontList_(db, s) {
 
 function bndTeacherState_(db) {
   var s = bndSession_(db);
-  var out = { ok: true, now: Date.now(), session: s ? bndPublicSession_(s) : null, roster: bndRosterPublic_() };
+  var out = { ok: true, now: Date.now(), session: s ? bndPublicSession_(s) : null };
   if (!s) return out;
   var sc = bndScores_(db);
   out.players = Object.keys(s.players).map(function (sid) {
     var d = bndDeskOf_(s, sid);
-    return { sid: sid, label: bndLabel_(sid), desk: d ? d.id : null, locked: !!s.players[sid].device };
+    return { sid: sid, label: bndFullLabel_(sid), desk: d ? d.id : null };
   });
   out.desks = sc.desks.map(function (d) {
     var raw = s.desks.filter(function (x) { return x.id === d.id; })[0];
