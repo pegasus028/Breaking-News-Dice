@@ -132,7 +132,7 @@ function bndHandle(req) {
 
 /* ---------- roster (Roster.gs): students sign in by tapping their name ---------- */
 /* Three guest seats (visitors, new students, a spare iPad), always after the class list. */
-var BND_GUESTS = [{ sid: 'g1', name: 'Guest 1' }, { sid: 'g2', name: 'Guest 2' }, { sid: 'g3', name: 'Guest 3' }];
+var BND_GUESTS = [{ sid: 'g1', name: 'Guest#1' }, { sid: 'g2', name: 'Guest#2' }, { sid: 'g3', name: 'Guest#3' }];
 function bndIsGuest_(sid) { return /^g\d+$/.test(String(sid)); }
 function bndRoster_() {
   var r = (typeof ROSTER !== 'undefined' && ROSTER) ? ROSTER : [];
