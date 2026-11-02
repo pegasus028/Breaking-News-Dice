@@ -158,11 +158,11 @@ body.clean .tc-ctrl .btn:not(#btnClean) { display: none; }
 .deskcard p { margin: 6px 0 0; font-size: 22px; }
 
 /* the river-gauge leaderboard: one gauge staff per desk, water rises with the score */
-.gauge-wrap { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 8px; flex: 1 1 0; min-height: 250px; --labh: 106px; }
+.gauge-wrap { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 8px; flex: 1 1 0; min-height: 250px; --labh: 126px; }
 .gauge-axis { position: relative; }
 .gauge-axis span { position: absolute; right: 6px; transform: translateY(50%); font-weight: 700; font-size: 16px; color: var(--muted); }
 .gauge-board { display: grid; gap: 10px; grid-template-rows: minmax(0, 1fr); align-items: stretch; position: relative; min-height: 0; }
-.gauge { display: grid; grid-template-rows: minmax(0, 1fr) var(--labh, 106px); min-width: 0; min-height: 0; }
+.gauge { display: grid; grid-template-rows: minmax(0, 1fr) var(--labh, 126px); min-width: 0; min-height: 0; }
 .gauge .tube { position: relative; border-bottom: 4px solid var(--ink); }
 .gauge .staff { position: absolute; left: 0; bottom: 0; top: 0; width: 12px;
   background: repeating-linear-gradient(to top, var(--gauge-a) 0 calc(var(--seg) * .45), #fff calc(var(--seg) * .45) calc(var(--seg) * .5),

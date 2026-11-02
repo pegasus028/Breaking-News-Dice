@@ -16,9 +16,9 @@
   function poll() {
     if (!sid) return;
     var req = { action: 'state', sid: sid };
-    var s = st && st.session;
-    var writing = s && s.phase === 'write';
-    if (draft.dirty && (writing || (s && s.phase === 'verify')) && (Date.now() - draft.sentAt > 6000 || !writing)) {
+    var stage = st && st.desk && st.desk.stage;
+    var writing = stage === 'write';
+    if (draft.dirty && (writing || stage === 'check') && (Date.now() - draft.sentAt > 6000 || !writing)) {
       req.draft = draft.text; draft.sentAt = Date.now(); draft.dirty = false;
     }
     if (poll.busy) return;
@@ -31,10 +31,10 @@
     setConn(true);
     if (!v.ok) { lastError = v.error || 'Something went wrong.'; render(true); return; }
     if (v.saveError && draft.text) lastError = v.saveError;
-    var prevPhase = st && st.session && st.session.phase;
+    var prevStage = st && st.desk && st.desk.stage;
     st = v;
     // writing just closed: send the latest draft straight away
-    if (prevPhase === 'write' && v.session && v.session.phase !== 'write' && draft.dirty) {
+    if (prevStage === 'write' && !(v.desk && v.desk.stage === 'write') && draft.dirty) {
       bndApi({ action: 'save', sid: sid, text: draft.text, filed: true }).catch(function () {});
       draft.dirty = false;
     }
@@ -46,12 +46,14 @@
     if (!st) return 'loading';
     var s = st.session;
     if (!s) return 'nosession';
-    if (!st.desk) return 'team-' + s.id;
-    if (s.phase === 'lobby' || s.phase === 'paired') return 'paired-' + st.desk.id + '-' + st.desk.members.map(function (m) { return m.sid; }).join('.');
-    if (s.phase === 'write') return st.desk.words ? 'write-' + s.round : 'roll-' + s.round;
-    if (s.phase === 'verify') return st.task ? (st.task.done ? 'checked-' + s.round : 'check-' + s.round) : 'nocheck-' + s.round;
-    if (s.phase === 'reveal') return 'reveal-' + s.round + '-' + JSON.stringify(st.myPost && st.myPost.score);
-    return 'final-' + st.desk.total + '-' + st.desk.rank;
+    if (!st.desk) return s.phase === 'final' ? 'over-' + s.id : 'team-' + s.id;
+    var d = st.desk;
+    if (s.phase === 'final') return 'final-' + d.total + '-' + d.rank;
+    if (d.stage === 'wait') return 'paired-' + d.id + '-' + d.members.length;
+    if (d.stage === 'write') return d.words ? 'write-' + d.round : 'roll-' + d.round;
+    if (d.stage === 'check') return st.task ? (st.task.done ? 'checked-' + d.round : 'check-' + d.round + st.task.key) : 'nocheck-' + d.round;
+    if (d.stage === 'result') return 'reveal-' + d.round + '-' + JSON.stringify(st.myPost && st.myPost.score);
+    return 'done-' + d.total + '-' + d.rank;
   }
 
   function render(force) {
@@ -62,7 +64,7 @@
       var k = key.split('-')[0];
       var fn = { loading: loadingScreen, nosession: waitScreen, team: teamScreen,
         paired: pairedScreen, roll: rollScreen, write: writeScreen, check: checkScreen, checked: checkedScreen,
-        nocheck: noCheckScreen, reveal: revealScreen, final: finalScreen }[k];
+        nocheck: noCheckScreen, reveal: revealScreen, done: doneScreen, final: finalScreen, over: overScreen }[k];
       app.innerHTML = '';
       fn();
       if (lastError) { app.insertAdjacentHTML('afterbegin', '<div class="err" role="alert">' + bndEsc(lastError) + '</div>'); lastError = ''; }
@@ -82,19 +84,19 @@
   }
 
   function head(title, withTimer) {
-    var s = st && st.session;
+    var s = st && st.session, d = st && st.desk;
     return '<div class="st-phase"><h1>' + title + '</h1>' + (withTimer ? '<span class="st-timer" id="timer"></span>' : '') + '</div>' +
-      (s && s.round ? '<p class="muted small" style="margin:0">Round ' + s.round + ' of ' + s.rounds + '</p>' : '');
+      (d && d.round && s ? '<p class="muted small" style="margin:0">Round ' + d.round + ' of ' + s.rounds + '</p>' : '');
   }
 
   function tickTimer() {
     var el = document.getElementById('timer');
-    if (!el || !st || !st.session) return;
-    var left = bndSecsLeft(st.session);
+    if (!el || !st || !st.desk) return;
+    var left = bndSecsLeft({ phaseEnds: st.desk.stageEnds });
     el.textContent = left === null ? '' : bndClock(left);
     el.classList.toggle('low', left !== null && left <= 20);
     // time's up while writing: file whatever is there
-    if (left === 0 && st.session.phase === 'write' && draft.text.trim() && !(st.myPost && st.myPost.filed) && !busy) {
+    if (left === 0 && st.desk.stage === 'write' && draft.text.trim() && !(st.myPost && st.myPost.filed) && !busy) {
       file(true);
     }
   }
@@ -106,7 +108,7 @@
       '<li><b>Roll</b> the dice. Your team gets two flood words.</li>' +
       '<li><b>Write</b> a breaking news post (15–25 words) that uses both words. A passive (<i>were evacuated</i>) earns a bonus.</li>' +
       '<li><b>Fact-check</b> a post from another team: are the words used with the right meaning?</li>' +
-      '<li><b>Watch the screen</b>: T.Chris picks the Front Page post each round.</li></ol>' +
+      '<li><b>See your score</b>, then the next round starts. Three rounds; your team plays at its own pace.</li></ol>' +
       '<p class="small muted" style="margin:6px 0 0">You and your partner each write your own post. Both scores go to your team.</p></div>';
   }
 
@@ -122,7 +124,7 @@
     var h = head('Choose your team number') +
       '<p class="lead">Two players per team. Tap the <b>same number</b> as your partner. ' +
       'The <b>first</b> to join is <b>Player 1</b>; the <b>second</b> is <b>Player 2</b>.</p>' +
-      (st.session.round > 0 ? '<p class="small muted">The game has started. Join your team now; you start from the next step.</p>' : '') +
+
       '<div class="teams" id="teams">';
     for (var i = 1; i <= n; i++) {
       var full = (byNum[i] || 0) >= (st.teamMax || 2);
@@ -167,8 +169,9 @@
     var mates = d.members.filter(function (m) { return m.sid !== sid; });
     app.innerHTML = head('Team ' + d.num + ' \u00b7 ' + bndEsc(d.name)) +
       '<p class="lead">You are <b>' + bndEsc(st.me.label) + '</b>.</p>' +
-      (mates.length ? '<div class="card"><b>Your partner has joined.</b> Sit together and wait for T.Chris to start.</div>'
-        : '<div class="card waitbar">Waiting for your partner to join Team ' + d.num + '<span class="dots"><i>.</i><i>.</i><i>.</i></span></div>') +
+      (mates.length ? '<div class="card"><b>Your partner has joined.</b> Starting\u2026</div>'
+        : '<div class="card waitbar">Waiting for your partner to join Team ' + d.num + '<span class="dots"><i>.</i><i>.</i><i>.</i></span></div>' +
+          '<p class="small muted">Your game starts by itself as soon as your partner joins.</p>') +
       '<p><button class="btn" id="leave">Wrong team? Change number</button></p>' + howTo();
     document.getElementById('leave').onclick = function () {
       this.disabled = true;
@@ -206,8 +209,8 @@
   /* ---------- write ---------- */
   function writeScreen() {
     var s = st.session, words = st.desk.words;
-    if (draft.round !== s.round) {
-      draft = { text: (st.myPost && st.myPost.text) || '', dirty: false, sentAt: 0, round: s.round };
+    if (draft.round !== st.desk.round) {
+      draft = { text: (st.myPost && st.myPost.text) || '', dirty: false, sentAt: 0, round: st.desk.round };
     }
     app.innerHTML = head('Write your post', true) +
       '<div class="dice" aria-label="Your dice words">' + words.map(function (w) {
@@ -289,7 +292,8 @@
     var t = st.task;
     verdict = { ok: [null, null], stars: 0 };
     app.innerHTML = head('Fact-check', true) +
-      '<p class="lead">Read this post from another team. Be fair: it’s their score.</p>' +
+      (t.sample ? '<p class="lead">Practice fact-check: no other team has finished a post yet.</p>'
+        : '<p class="lead">Read this post from another team. Be fair: it’s their score.</p>') +
       '<div class="card post-show"><span class="tag">BREAKING</span>' + bndHighlight(t.text, t.words) + '</div>' +
       t.words.map(function (w, i) {
         var x = BND_WORD_BY_ID[w];
@@ -331,11 +335,11 @@
 
   function checkedScreen() {
     app.innerHTML = head('Fact-check sent', true) + '<p class="lead">Thank you. That earned your team +' + BND_RULES.ptsCheck +
-      '. Results appear on the big screen soon.</p>' + myPostCard();
+      '. Your round results appear when your partner has checked too, or when the timer ends.</p>' + myPostCard();
     tickTimer();
   }
   function noCheckScreen() {
-    app.innerHTML = head('Fact-check', true) + '<p class="lead">There is no post for you to check this round. Read your partner’s post and help each other spot mistakes.</p>' + myPostCard();
+    app.innerHTML = head('Fact-check', true) + '<p class="lead">Finding a post from another team for you to check…</p>' + myPostCard();
     tickTimer();
   }
 
@@ -347,32 +351,55 @@
 
   /* ---------- results ---------- */
   function revealScreen() {
-    var p = st.myPost, sc = p && p.score, R = BND_RULES;
-    var h = head('Round ' + st.session.round + ' results') + '<p class="lead">Look at the big screen for the Front Page.</p>' + myPostCard();
+    var p = st.myPost, sc = p && p.score, R = BND_RULES, d = st.desk;
+    var last = d.round >= st.session.rounds;
+    var h = head('Round ' + d.round + ' results', true) + myPostCard();
     if (sc) {
       var rows = [];
       p.words.forEach(function (w, i) { rows.push(['Used <i>' + bndEsc(bndWordName(w)) + '</i>', sc.used[i] ? R.ptsWord : 0]); });
-      rows.push([sc.count + ' words' + (sc.inRange ? '' : ' (outside 15–25)'), sc.inRange ? R.ptsLength : 0]);
+      rows.push([sc.count + ' words' + (sc.inRange ? '' : ' (outside 15\u201325)'), sc.inRange ? R.ptsLength : 0]);
       rows.push(['Passive', sc.passive ? R.ptsPassive : 0]);
-      rows.push(['Fact-checker: right meaning' + (sc.checks ? '' : ' (not checked: benefit of the doubt)'), sc.peerPts]);
+      rows.push(['Fact-checker: right meaning' + (sc.checks ? '' : ' (not checked yet)'), sc.peerPts]);
       rows.push(['Headline stars', sc.stars]);
       if (sc.front) rows.push(['<b>Front Page!</b>', R.ptsFront]);
       h += '<table class="breakdown">' + rows.map(function (r) { return '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td></tr>'; }).join('') +
-        '<tr class="total"><td>Your post</td><td>' + (sc.spiked ? '0 (removed by T.Chris)' : sc.total) + '</td></tr></table>';
+        '<tr class="total"><td>Your post</td><td>' + (sc.spiked ? '0 (removed by T.Chris)' : sc.total) + '</td></tr></table>' +
+        (sc.checks ? '' : '<p class="small muted">Fact-check points arrive when another team checks your post.</p>');
     }
-    h += '<p class="small muted">Team scores are scaled so a trio and a pair compete fairly.</p>';
+    h += '<button class="btn big primary" id="next">' + (last ? 'See our final total' : 'Start round ' + (d.round + 1)) + '</button>' +
+      '<p class="small muted">Either partner can tap. Otherwise it moves on when the timer ends.</p>';
     app.innerHTML = h;
+    document.getElementById('next').onclick = function () {
+      this.disabled = true;
+      bndApi({ action: 'next', sid: sid, round: d.round }).then(apply).catch(function () { lastError = 'No connection. Try again.'; render(true); });
+    };
+    tickTimer();
+  }
+
+  function doneScreen() {
+    var d = st.desk;
+    app.innerHTML = head('All rounds done!') + '<p class="lead">Team ' + d.num + ' \u00b7 ' + bndEsc(d.name) + ' is ranked</p>' +
+      '<div class="bigrank">#' + d.rank + ' <span class="muted" style="font-size:24px">of ' + d.deskCount + '</span></div>' +
+      '<p class="lead">with <b>' + d.total + '</b> points so far. Your score can still rise as other teams fact-check your posts.</p>' +
+      '<p class="lead">Watch the big screen until T.Chris ends the game.</p>' + frontHtml();
+  }
+
+  function overScreen() {
+    app.innerHTML = head('Game over') + '<p class="lead">This game has finished. Watch the big screen for the results.</p>';
+  }
+
+  function frontHtml() {
+    return (st.front || []).length ? '<h3 style="margin-top:20px">Today\u2019s Front Page</h3>' + st.front.map(function (f) {
+      return '<div class="card post-show"><span class="tag">FRONT PAGE</span>' + bndHighlight(f.text, f.words) +
+        '<div class="small muted">' + bndEsc(f.desk) + '</div></div>';
+    }).join('') : '';
   }
 
   function finalScreen() {
     var d = st.desk;
     app.innerHTML = head('Final scores') + '<p class="lead">Team ' + d.num + ' \u00b7 ' + bndEsc(d.name) + ' finished</p>' +
       '<div class="bigrank">#' + d.rank + ' <span class="muted" style="font-size:24px">of ' + d.deskCount + '</span></div>' +
-      '<p class="lead">with <b>' + d.total + '</b> points.</p>' +
-      ((st.front || []).length ? '<h3 style="margin-top:20px">Today’s Front Page</h3>' + st.front.map(function (f) {
-        return '<div class="card post-show"><span class="tag">ROUND ' + f.round + '</span>' + bndHighlight(f.text, f.words) +
-          '<div class="small muted">' + bndEsc(f.desk) + '</div></div>';
-      }).join('') : '');
+      '<p class="lead">with <b>' + d.total + '</b> points.</p>' + frontHtml();
   }
 
   function refreshLive() {

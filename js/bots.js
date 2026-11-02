@@ -1,22 +1,6 @@
 /* Demo mode only: simulated classmates, so one person can try the whole game.
    The teacher console's "Simulate class" switch calls bndBotsTick() each poll. */
-var BND_BOT_LINES = {
-  'evacuate': ['Hundreds of residents were evacuated from Rangsit overnight.', 'Police are evacuating families who live near the canal.'],
-  'submerged': ['Several cars were left submerged on Vibhavadi Road.', 'The school football field is still completely submerged.'],
-  'inundate': ['The hotline has been inundated with calls since Monday.', 'Floodwater inundated the night market before dawn.'],
-  'displaced': ['Displaced families are being housed in a temple hall.', 'Over two thousand people were displaced by the storm.'],
-  'aftermath': ['In the aftermath, volunteers are clearing the blocked drains.', 'The aftermath of the flood will cost the city millions.'],
-  'devastate': ['Rice farms across Ayutthaya were devastated this week.', 'The flood devastated three small riverside villages.'],
-  'resilient': ['Officials say the city must be made more resilient.', 'Local shop owners have proved remarkably resilient.'],
-  'mitigate': ['New water tunnels could mitigate the risk next year.', 'Flood damage can be mitigated by early warnings.'],
-  'exacerbate': ['Blocked drains exacerbated the flooding in Lat Phrao.', 'The crisis was exacerbated by heavy traffic.'],
-  'prolonged': ['Prolonged rain has closed four schools in Bangkok.', 'Residents now fear a prolonged power cut.'],
-  'unprecedented': ['Officials recorded unprecedented water levels at the river gauge.', 'The river rose at an unprecedented speed.'],
-  'discharge': ['More water is being discharged from the dam today.', 'The dam’s discharge has doubled since Friday.'],
-  'relief': ['Relief supplies were handed out by students at noon.', 'Residents sighed with relief when the rain finally stopped.'],
-  'subside': ['The water finally subsided in Don Mueang on Sunday.', 'Experts expect the flood to subside by next week.'],
-  'trying-times': ['Neighbours shared food and water during these trying times.', 'These are trying times for farmers in the Central Plain.']
-};
+var BND_BOT_LINES = BND_SAMPLE_LINES;
 
 function bndBotPost(words) {
   var a = BND_BOT_LINES[words[0]], b = BND_BOT_LINES[words[1]];
@@ -27,18 +11,17 @@ function bndBotPost(words) {
 }
 
 /* Pretend players (bot-01 …) join like real students: each fills the first team that is waiting
-   for a partner, otherwise the lowest empty team number. Real players are never touched. */
+   for a partner, otherwise the lowest empty team number, then plays its own team's rounds. */
 function bndBotsTick() {
   var t = bndHandle({ action: 'tstate', pin: '' });
-  if (!t.ok || !t.session) return;
-  var s = t.session;
+  if (!t.ok || !t.session || t.session.phase !== 'open') return;
   var n = (typeof BND_DEMO_BOTS === 'number') ? BND_DEMO_BOTS : 22;
   for (var i = 1; i <= n; i++) {
     if (Math.random() < 0.45) continue;                       // act a little at a time, like real students
     var id = 'bot-' + (i < 10 ? '0' : '') + i;
     var v = bndHandle({ action: 'state', sid: id });
-    if (!v.desk) {
-      if (s.phase !== 'lobby' && s.phase !== 'paired') continue;
+    var d = v.desk;
+    if (!d) {
       var teams = {};
       (v.teams || []).forEach(function (x) { teams[x.num] = x.members.length; });
       var pick = 0;
@@ -47,12 +30,13 @@ function bndBotsTick() {
       if (pick) bndHandle({ action: 'team', sid: id, team: pick });
       continue;
     }
-    if (s.phase === 'write') {
-      if (!v.desk.words) { bndHandle({ action: 'roll', sid: id }); continue; }
-      if (!v.myPost || !v.myPost.filed) bndHandle({ action: 'save', sid: id, text: bndBotPost(v.desk.words), filed: true });
-    }
-    if (s.phase === 'verify' && v.task && !v.task.done) {
+    if (d.stage === 'write') {
+      if (!d.words) { bndHandle({ action: 'roll', sid: id }); continue; }
+      if ((!v.myPost || !v.myPost.filed) && Math.random() < 0.3) bndHandle({ action: 'save', sid: id, text: bndBotPost(d.words), filed: true });
+    } else if (d.stage === 'check' && v.task && !v.task.done && Math.random() < 0.4) {
       bndHandle({ action: 'check', sid: id, ok: [Math.random() < 0.85, Math.random() < 0.85], stars: 1 + Math.floor(Math.random() * 3) });
+    } else if (d.stage === 'result' && Math.random() < 0.15) {
+      bndHandle({ action: 'next', sid: id, round: d.round });
     }
   }
 }

@@ -10,13 +10,21 @@ water on river gauges.
 - `teacher.html` — teacher board for the projector: run the phases, fix teams, remove posts, pick the Front Page.
 - `demo.html` — board and one student side by side, in Demo mode.
 
-## Running a game (about 20 minutes)
+## Running a game (about 15–20 minutes)
 
-| Step | Time | What happens |
-|---|---|---|
-| Check in | 1–2 min | Like Conditionals Arena: students scan the QR code and tap their **team number** (1–15), then **Enter the newsroom**. Partners tap the same number; T.Chris tells them their number. Two players per team: the first to join is Player 1, the second Player 2; a full team is refused. No names are collected. Before round 1 a player can change number; after that, use **Move** in Teams & posts. Latecomers can still join mid-game. |
-| Round × 3 | 5–6 min each | **Write** (3:00): roll, write, file. Live checks show both words, length, passive bonus and passive errors such as *was subsided*. **Fact-check** (1:30): each student judges one post from another team. **Results**: pick the Front Page from the top three. |
-| Finish | 1 min | Winner and scores; **Download results** saves every post as CSV. |
+1. **Open the game** on the teacher board (projector). It shows a QR code and the student link.
+2. **Students join like Conditionals Arena:** tap their **team number** (1–15), then **Enter the newsroom**.
+   Partners tap the same number (T.Chris tells them); the first is Player 1, the second Player 2; a full team is refused.
+   No names are collected.
+3. **Each team starts by itself** the moment its second player joins, and plays every round at its own pace:
+   - **Write** (3:00): roll two words, write a 15–25-word post, file it. The team moves on when both have filed or the timer ends (drafts are filed automatically).
+   - **Fact-check** (1:30): each student checks a finished post from another team (least-checked first). If no other team has a post yet, she gets a practice post.
+   - **Results** (25 s): the round score; either partner taps **Start round 2** (or it moves on by itself).
+   - After the last round the team sees its rank; its score can still rise as other teams check its posts.
+4. The board shows live totals and each team's stage, plus the best fact-checked posts: tap **Front Page** (+5) any time.
+   **Teams & posts** lets you move a player, **Start solo** for a student whose partner is absent, or remove a post.
+5. **Finish game** (click twice) ends play, gives unchecked posts the benefit of the doubt and shows the winner.
+   **Download results** saves every post as CSV; **New game** archives this game and opens a fresh one.
 
 ## Scoring
 

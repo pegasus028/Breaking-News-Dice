@@ -63,16 +63,13 @@
   /* ---------------- top bar ---------------- */
   function renderTop() {
     var s = setupMode ? null : t.session;
-    $('round').innerHTML = s ? (s.round ? 'Round ' + s.round + ' of ' + s.rounds : 'Before round 1') +
-      '<span class="ph">' + BND_PHASE_LABEL[s.phase] + '</span>' : 'No game yet';
+    var c0 = t && t.counts;
+    $('round').innerHTML = s ? (s.phase === 'final' ? 'Game over' : 'Live game') +
+      '<span class="ph">' + (s.phase === 'final' ? 'Final scores' : (c0 ? c0.playing + ' playing \u00b7 ' + c0.done + ' done \u00b7 ' + c0.waiting + ' waiting' : '')) + '</span>' : 'No game yet';
     var c = [];
     if (s) {
-      var p = s.phase;
-      if (p === 'lobby' || p === 'paired') c.push(['go', 'Start round 1', 'primary']);
-      if (p === 'write') c.push(['extend', '+30 s', ''], ['go', 'Start fact-check', 'primary']);
-      if (p === 'verify') c.push(['extend', '+30 s', ''], ['go', 'Show results', 'primary']);
-      if (p === 'reveal') c.push(['go', s.round < s.rounds ? 'Start round ' + (s.round + 1) : 'Finish game', 'primary']);
-      if (p === 'final') c.push(['export', 'Download results', 'primary'], ['new', 'New game', '']);
+      if (s.phase === 'open') c.push(['finish', 'Finish game', 'alert']);
+      if (s.phase === 'final') c.push(['export', 'Download results', 'primary'], ['new', 'New game', '']);
     }
     c.push(['drawer', 'Teams & posts', ''], ['clean', document.body.classList.contains('clean') ? 'Show controls' : 'Hide controls', '']);
     var sig = JSON.stringify(c) + busy;
@@ -92,19 +89,12 @@
     if (a === 'clean') { document.body.classList.toggle('clean'); ctrlSig = ''; renderTop(); return; }
     if (a === 'new') { if (armed(b)) { setupMode = true; stageSig = ''; ctrlSig = ''; render(); } return; }
     if (a === 'export') { exportCsv(); return; }
-    if (a === 'extend') { call({ action: 'extend', secs: 30 }); return; }
-    if (a === 'go') {
-      busy = true; renderTop();
-      call({ action: 'go', from: { phase: s.phase, round: s.round } }).then(function () { busy = false; ctrlSig = ''; renderTop(); });
-    }
+    if (a === 'finish') { if (armed(b)) { call({ action: 'finish' }).then(function () { ctrlSig = ''; renderTop(); }); } return; }
   };
 
   function tickTimer() {
     var el = $('timer');
-    if (!t || !t.session || setupMode) { el.textContent = ''; el.classList.remove('low'); return; }
-    var left = bndSecsLeft(t.session);
-    el.textContent = left === null ? '' : bndClock(left);
-    el.classList.toggle('low', left !== null && left <= 20);
+    el.textContent = '';             // each team has its own clock now (on the student screens)
   }
 
   /* ---------------- stage ---------------- */
@@ -125,7 +115,8 @@
     var s = t && !setupMode && t.session;
     if (!s) { if (stageSig !== 'setup') { stageSig = 'setup'; st.innerHTML = setupHtml(); bindSetup(); } return; }
     var p = s.phase;
-    if (p === 'lobby' || p === 'paired') {
+    var started = t.desks.some(function (d) { return d.round > 0; });
+    if (p === 'open' && !started) {
       var sig = 'lobby' + JSON.stringify([t.players, t.desks.map(function (d) { return [d.num, d.members]; })]);
       if (sig === stageSig) return;
       stageSig = sig;
@@ -133,33 +124,26 @@
       t.desks.forEach(function (d) { nPlayers += d.members.length; if (d.members.length >= 2) full++; });
       st.innerHTML = '<div class="joinbox"><div class="qr" id="qr"></div><div><h1 class="tc-title">Choose your team number</h1>' +
         '<p>Open the link and tap <b>your team number</b>. Partners tap the <b>same number</b>. ' +
-        'The first to join is Player 1, the second is Player 2.</p>' +
+        'The first to join is Player 1, the second is Player 2. Each team starts as soon as both partners are in.</p>' +
         '<p class="url">' + bndEsc(studentUrl()) + '</p>' +
         '<p class="tc-status"><span><span class="num">' + nPlayers + '</span> players</span>' +
         '<span><span class="num">' + full + '</span>/' + t.desks.length + ' teams complete</span></p></div></div>' +
         (t.desks.length ? '<div class="teamgrid">' + t.desks.map(function (d) {
           var two = d.members.length >= 2;
           return '<div class="teamcard' + (two ? '' : ' half') + '"><b>' + d.num + '</b><i>' + bndEsc(d.name) + '</i><span>' +
-            (two ? 'Ready \u2713' : 'Waiting for partner\u2026') + '</span></div>';
+            (two ? 'Playing \u2713' : 'Waiting for partner\u2026') + '</span></div>';
         }).join('') + '</div>' : '<p class="tc-status" style="font-weight:400">Teams appear here as students join.</p>');
       drawQr();
       return;
     }
-    // write / verify / reveal / final: status line, phase panel, gauge board
+    // live game / final: status line, top posts, gauge board
     var c = t.counts;
-    var status = '';
-    if (p === 'write') status = '<span><span class="num">' + c.rolled + '</span>/' + t.desks.length + ' teams rolled</span>' +
-      '<span><span class="num">' + c.filed + '</span>/' + c.seated + ' posts filed</span>' +
-      (c.writing > c.filed ? '<span class="muted">' + (c.writing - c.filed) + ' still drafting</span>' : '');
-    if (p === 'verify') status = '<span><span class="num">' + c.checks + '</span>/' + c.toCheck + ' fact-checks done</span>';
-    if (p === 'reveal') status = '<span>Round ' + s.round + ': pick the Front Page (+' + BND_RULES.ptsFront + ')</span>';
-    if (p === 'final') status = '';
-    var panel = '';
-    if (p === 'write') panel = '<p class="tc-status" style="font-weight:400">Roll, write 15–25 words using both words, then file. Bonus for a passive.</p>';
-    if (p === 'verify') panel = '<p class="tc-status" style="font-weight:400">Check the post on your screen: right meaning? Would you click it?</p>';
-    if (p === 'reveal') panel = candidatesHtml(s.round);
-    if (p === 'final') panel = finalHtml();
-    var sigTop = p + s.round + status + panel;
+    var status = p === 'final' ? '' :
+      '<span><span class="num">' + c.playing + '</span> playing</span><span><span class="num">' + c.done + '</span> done</span>' +
+      (c.waiting ? '<span><span class="num">' + c.waiting + '</span> waiting</span>' : '') +
+      '<span class="small muted" style="font-weight:400">Late? ' + bndEsc(studentUrl()) + '</span>';
+    var panel = p === 'final' ? finalHtml() : candidatesHtml();
+    var sigTop = p + status + panel;
     if (stageSig.indexOf('board|') !== 0 || stageSig.slice(6) !== sigTop) {
       var keepBoard = stageSig.indexOf('board|') === 0 && $('board');
       var boardEl = keepBoard ? $('gaugewrap') : null;
@@ -176,11 +160,17 @@
     renderBoard();
   }
 
+  function stageLabel(d) {
+    if (t.session.phase === 'final') return 'final';
+    return { wait: 'waiting', write: 'R' + d.round + ' writing', check: 'R' + d.round + ' checking',
+      result: 'R' + d.round + ' results', done: 'done \u2713' }[d.stage] || '';
+  }
+
   function renderBoard() {
     var board = $('board'), axis = $('axis');
     if (!board) return;
     var desks = t.desks;
-    var LABH = 106;                              // label strip under each tube (matches --labh)
+    var LABH = 126;                              // label strip under each tube (matches --labh)
     var ids = desks.map(function (d) { return d.id; }).join();
     if (board.getAttribute('data-ids') !== ids) {
       board.setAttribute('data-ids', ids);
@@ -212,26 +202,27 @@
       var th = (dl && Date.now() - dl.at < 4000 ? '<small>+' + dl.v + '</small>' : '') + d.total;
       if (tot.innerHTML !== th) tot.innerHTML = th;
       var lab = '<span class="num">Team ' + d.num + '</span><b>' + bndEsc(d.name) + '</b>' +
-        '<span class="rk">#' + d.rank + '</span>';
+        '<span class="rk">#' + d.rank + ' \u00b7 ' + stageLabel(d) + '</span>';
       var le = g.querySelector('.lab');
       if (le.innerHTML !== lab) le.innerHTML = lab;
     });
   }
 
-  function candidatesHtml(round) {
-    var posts = t.posts.filter(function (p) { return p.round === round && p.text.trim() && !p.score.spiked; });
-    var front = t.front.filter(function (f) { return f.round === round; })[0];
-    if (front) {
-      return '<div class="frontpage"><div class="meta" style="font-size:20px;margin-bottom:8px"><span class="tag">FRONT PAGE</span> <b>' +
-        bndEsc(front.desk) + '</b></div><div class="post-show">' + bndHighlight(front.text, front.words) + '</div></div>';
-    }
-    posts.sort(function (a, b) { return (b.score.stars - a.score.stars) || (b.score.total - a.score.total); });
-    if (!posts.length) return '<p class="tc-status">No posts this round.</p>';
-    return '<div class="cands">' + posts.slice(0, 3).map(function (p) {
-      return '<div class="cand"><div class="post-show"><span class="tag">BREAKING</span> ' + bndHighlight(p.text, p.words) + '</div>' +
-        '<div class="meta"><b>' + bndEsc(p.deskName) + '</b><span>' + '★'.repeat(p.score.stars || 0) + '</span>' +
-        '<button class="btn" data-front="' + bndEsc(p.key) + '" style="margin-left:auto">Front Page</button></div></div>';
-    }).join('') + '</div>';
+  /* Latest Front Page plus the best fact-checked posts not yet picked. */
+  function candidatesHtml() {
+    var front = t.front[t.front.length - 1];
+    var posts = t.posts.filter(function (p) { return p.filed && p.text.trim() && !p.score.spiked && !p.score.front && p.score.checks > 0; });
+    posts.sort(function (a, b) { return (b.score.stars - a.score.stars) || (b.score.total - a.score.total) || (b.at - a.at); });
+    var cards = [];
+    if (front) cards.push('<div class="cand front"><div class="post-show"><span class="tag">FRONT PAGE</span> ' + bndHighlight(front.text, front.words) +
+      '</div><div class="meta"><b>' + bndEsc(front.desk) + '</b><button class="btn" data-front="' + bndEsc(front.key) + '" style="margin-left:auto">Undo</button></div></div>');
+    posts.slice(0, front ? 2 : 3).forEach(function (p) {
+      cards.push('<div class="cand"><div class="post-show"><span class="tag">BREAKING</span> ' + bndHighlight(p.text, p.words) + '</div>' +
+        '<div class="meta"><b>' + bndEsc(p.deskName) + '</b><span>' + '\u2605'.repeat(p.score.stars || 0) + '</span>' +
+        '<button class="btn" data-front="' + bndEsc(p.key) + '" style="margin-left:auto">Front Page</button></div></div>');
+    });
+    if (!cards.length) return '<p class="tc-status" style="font-weight:400">The best fact-checked posts appear here. Tap <b>Front Page</b> to give one +' + BND_RULES.ptsFront + '.</p>';
+    return '<div class="cands">' + cards.join('') + '</div>';
   }
 
   function finalHtml() {
@@ -246,11 +237,12 @@
   /* ---------------- setup (no game yet) ---------------- */
   function setupHtml() {
     return '<div class="setup"><h1 class="tc-title">Breaking News Dice</h1>' +
-      '<p>Pairs roll two Unit 5 flood words, write a 15–25-word breaking news post, then fact-check another desk. About 20 minutes.</p>' +
+      '<p>Students tap a team number; each team starts by itself as soon as both partners are in, then plays every round at its own pace: ' +
+      'roll two Unit 5 flood words, write a 15\u201325-word breaking news post, fact-check another team\u2019s post, see the round score. About 15\u201320 minutes.</p>' +
       '<div class="row"><label>Rounds<select id="sRounds"><option>2</option><option selected>3</option><option>4</option></select></label>' +
       '<label>Writing time<select id="sWrite"><option value="150">2:30</option><option value="180" selected>3:00</option><option value="240">4:00</option></select></label>' +
       '<label>Fact-check time<select id="sVerify"><option value="60">1:00</option><option value="90" selected>1:30</option><option value="120">2:00</option></select></label></div>' +
-      '<button class="btn big primary" id="start" style="max-width:420px">Open check-in</button>' +
+      '<button class="btn big primary" id="start" style="max-width:420px">Open the game</button>' +
       (BND_LIVE ? '' : '<p class="small muted" style="margin-top:18px">Demo mode: the game lives in this browser. Turn on <b>Simulate class</b> in Teams &amp; posts to fill it with pretend students, and open the student console in another tab to play one of them.</p>') +
       '</div>';
   }
@@ -278,12 +270,14 @@
     var s = t.session;
     var unseated = t.players.filter(function (p) { return !p.desk; });
     var h = '<button class="btn close" data-x="close">Close</button><h2>Teams</h2>' +
-      '<p class="small muted">Students choose their own team number. To fix a mistake, tap a player, then <b>Move here</b> on another team.</p>';
+      '<p class="small muted">Students choose their own team number; a team starts when both partners are in. To fix a mistake, tap a player, then <b>Move here</b> on another team. ' +
+      'If a partner is absent, <b>Start solo</b> lets the other student play alone.</p>';
     if (selSid) h += '<p><b>Selected: ' + bndEsc(label(selSid)) + '</b> ' +
       '<button class="btn" data-x="newdesk" style="min-height:36px">Move to a new team</button> <button class="btn" data-x="unsel" style="min-height:36px">Cancel</button></p>';
     t.desks.forEach(function (d) {
-      h += '<div class="dk"><header>Team ' + d.num + ' \u00b7 ' + bndEsc(d.name) + ' <span class="muted">' + d.total + ' pts</span>' +
-        (selSid ? '<button class="btn" data-move="' + d.id + '">Move here</button>' : '') + '</header>' +
+      h += '<div class="dk"><header>Team ' + d.num + ' \u00b7 ' + bndEsc(d.name) + ' <span class="muted">' + d.total + ' pts \u00b7 ' + stageLabel(d) + '</span>' +
+        (selSid ? '<button class="btn" data-move="' + d.id + '">Move here</button>' :
+          (d.stage === 'wait' && d.members.length === 1 && s.phase === 'open' ? '<button class="btn" data-solo="' + d.id + '">Start solo</button>' : '')) + '</header>' +
         d.members.map(function (m) {
           return '<button class="mem' + (selSid === m.sid ? ' sel' : '') + '" data-sid="' + m.sid + '">' + bndEsc(m.label) + '</button>';
         }).join('') + '</div>';
@@ -291,14 +285,14 @@
     if (unseated.length) h += '<div class="dk"><header>Not in a team yet</header>' + unseated.map(function (m) {
       return '<button class="mem' + (selSid === m.sid ? ' sel' : '') + '" data-sid="' + m.sid + '">' + bndEsc(m.label) + '</button>';
     }).join('') + '</div>';
-    if (s.round) {
-      var posts = t.posts.filter(function (p) { return p.round === s.round; });
-      h += '<h2>Round ' + s.round + ' posts (' + posts.length + ')</h2>' + posts.map(function (p) {
+    if (t.posts.length) {
+      var posts = t.posts.slice().sort(function (a, b) { return b.at - a.at; });
+      h += '<h2>Posts, newest first (' + posts.length + ')</h2>' + posts.map(function (p) {
         var sc = p.score;
         return '<div class="post' + (sc.spiked ? ' spiked' : '') + '"><b>' + bndEsc(p.author) + '</b> <span class="muted">' + bndEsc(p.deskName) +
-          (p.filed ? '' : ' · draft') + ' · ' + sc.total + ' pts' + (sc.traps ? ' · passive error' : '') + '</span><div>' + bndHighlight(p.text, p.words) + '</div>' +
+          ' · R' + p.round + (p.filed ? '' : ' · draft') + ' · ' + sc.total + ' pts' + (sc.traps ? ' · passive error' : '') + '</span><div>' + bndHighlight(p.text, p.words) + '</div>' +
           '<div class="acts"><button class="btn" data-spike="' + bndEsc(p.key) + '">' + (sc.spiked ? 'Restore' : 'Remove (0 pts)') + '</button>' +
-          (s.phase === 'reveal' || s.phase === 'final' ? '<button class="btn" data-front="' + bndEsc(p.key) + '">' + (sc.front ? 'Undo Front Page' : 'Front Page') + '</button>' : '') +
+          (p.filed ? '<button class="btn" data-front="' + bndEsc(p.key) + '">' + (sc.front ? 'Undo Front Page' : 'Front Page') + '</button>' : '') +
           '</div></div>';
       }).join('');
     }
@@ -306,7 +300,7 @@
       '<label>Rounds<select id="dRounds">' + [2, 3, 4, 5].map(function (n) { return '<option' + (n === s.rounds ? ' selected' : '') + '>' + n + '</option>'; }).join('') + '</select></label>' +
       '<label>Writing<select id="dWrite">' + [120, 150, 180, 240, 300].map(function (n) { return '<option value="' + n + '"' + (n === s.writeSecs ? ' selected' : '') + '>' + bndClock(n) + '</option>'; }).join('') + '</select></label>' +
       '<label>Fact-check<select id="dVerify">' + [60, 90, 120, 150].map(function (n) { return '<option value="' + n + '"' + (n === s.verifySecs ? ' selected' : '') + '>' + bndClock(n) + '</option>'; }).join('') + '</select></label>' +
-      '</div><p class="small muted">Changes apply from the next phase.</p></div>' +
+      '</div><p class="small muted">Changes apply from each team\u2019s next round.</p></div>' +
       '<h2>Game</h2><p><button class="btn" data-x="export">Download results (CSV)</button> <button class="btn alert" data-x="new">New game</button></p>' + demoHtml();
     // keep scroll position while the drawer refreshes
     var top = dr.scrollTop, sig = h;
@@ -339,6 +333,7 @@
       if (x === 'reset') { if (armed(b)) { bndDemoReset(); bndStore('bnd-demo-sim', null); location.reload(); } return; }
       if (b.hasAttribute('data-sid')) { selSid = selSid === b.getAttribute('data-sid') ? null : b.getAttribute('data-sid'); dr.removeAttribute('data-sig'); renderDrawer(); return; }
       if (b.hasAttribute('data-move')) { call({ action: 'move', sid: selSid, desk: b.getAttribute('data-move') }); selSid = null; return; }
+      if (b.hasAttribute('data-solo')) { call({ action: 'startSolo', desk: b.getAttribute('data-solo') }); return; }
       if (b.hasAttribute('data-spike')) { call({ action: 'spike', key: b.getAttribute('data-spike') }); return; }
       if (b.hasAttribute('data-front')) { call({ action: 'front', key: b.getAttribute('data-front') }); return; }
     };
