@@ -18,7 +18,8 @@ if (PIN) ok(H({ action: 'tstate', pin: 'wrong' }).error === 'pin', 'pin enforced
 let t = H({ action: 'newSession', pin: PIN });
 ok(t.ok && t.session.phase === 'open' && t.session.requirePassive, 'session open, passive required');
 const roster = H({ action: 'roster' }).roster;
-ok(roster.length === ctx.ROSTER.length, 'roster served');
+ok(roster.length === ctx.ROSTER.length + 3, 'roster served with 3 guests');
+ok(roster.slice(-3).map(r => r.label).join(',') === 'Guest 1,Guest 2,Guest 3', 'guests listed last');
 const A = roster[0].sid;
 let v = H({ action: 'join', sid: A, device: 'devA' });
 ok(v.ok && v.round === 1 && v.stage === 'write', 'joins straight into round 1');

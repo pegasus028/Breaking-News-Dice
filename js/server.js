@@ -131,14 +131,25 @@ function bndHandle(req) {
 }
 
 /* ---------- roster (Roster.gs): students sign in by tapping their name ---------- */
-function bndRoster_() { return (typeof ROSTER !== 'undefined' && ROSTER) ? ROSTER : []; }
+/* Three guest seats (visitors, new students, a spare iPad), always after the class list. */
+var BND_GUESTS = [{ sid: 'g1', name: 'Guest 1' }, { sid: 'g2', name: 'Guest 2' }, { sid: 'g3', name: 'Guest 3' }];
+function bndIsGuest_(sid) { return /^g\d+$/.test(String(sid)); }
+function bndRoster_() {
+  var r = (typeof ROSTER !== 'undefined' && ROSTER) ? ROSTER : [];
+  var have = {};
+  r.forEach(function (s) { have[String(s.sid)] = 1; });
+  return r.concat(BND_GUESTS.filter(function (g) { return !have[g.sid]; }));
+}
 function bndRosterPublic_() {
   var r = bndRoster_();
   var counts = {};
   r.forEach(function (s) { counts[s.name] = (counts[s.name] || 0) + 1; });
   return r.map(function (s) {
     return { sid: String(s.sid), name: s.name, label: counts[s.name] > 1 ? s.name + ' (No. ' + s.sid + ')' : s.name };
-  }).sort(function (x, y) { return x.label.localeCompare(y.label); });
+  }).sort(function (x, y) {
+    var gx = bndIsGuest_(x.sid), gy = bndIsGuest_(y.sid);
+    return gx !== gy ? (gx ? 1 : -1) : x.label.localeCompare(y.label);
+  });
 }
 var BND_LABELS_ = null;
 function bndLabel_(sid) {

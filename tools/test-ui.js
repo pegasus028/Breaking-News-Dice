@@ -43,6 +43,8 @@ require('fs').mkdirSync(OUT, { recursive: true });
   await S.goto(BASE + 'student.html?demo');
   await S.waitForSelector('.names button');
   await S.screenshot({ path: OUT + '/s1-pick.png' });
+  const names = await S.$$eval('.names button', bs => bs.map(b => b.textContent));
+  if (names.slice(-3).join(',') !== 'Guest 1,Guest 2,Guest 3') errors.push('guest seats missing or not last: ' + names.slice(-4).join(','));
   await S.click('.names button:has-text("Hana")');
   await S.waitForSelector('#roll');
   await S.screenshot({ path: OUT + '/s2-roll.png', fullPage: true });
