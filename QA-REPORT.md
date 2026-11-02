@@ -14,7 +14,7 @@ timeout, so a hung request blocked that page's next poll for ever.
 synonyms only; all five tasks were shipped by Opus 5.5 on 2 Nov (section below). It says nothing about
 performance, so this pass is Claude's own.
 
-**Backend (`js/server.js` → `apps-script/Code.gs`, Version 8 deployed, same `/exec` URL)**
+**Backend (`js/server.js` → `apps-script/Code.gs`, Version 8 deployed by Claude in the browser on 2 Nov 2026 22:42, same `/exec` URL; verified live: roster 28 names, cold `state` 3.3 s while the cache rebuilt, then 1.4–2.0 s round trips from Bangkok)**
 
 | Area | Before | After |
 |---|---|---|
