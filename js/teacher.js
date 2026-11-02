@@ -69,14 +69,13 @@
     var c = [];
     if (s) {
       var p = s.phase;
-      if (p === 'lobby') c.push(['pair:mixed', 'Mixed-ability desks', 'primary'], ['pair:random', 'Random desks', '']);
-      if (p === 'paired') c.push(['go', 'Start round 1', 'primary'], ['pair:mixed', 'Re-make desks', '']);
+      if (p === 'lobby' || p === 'paired') c.push(['go', 'Start round 1', 'primary']);
       if (p === 'write') c.push(['extend', '+30 s', ''], ['go', 'Start fact-check', 'primary']);
       if (p === 'verify') c.push(['extend', '+30 s', ''], ['go', 'Show results', 'primary']);
       if (p === 'reveal') c.push(['go', s.round < s.rounds ? 'Start round ' + (s.round + 1) : 'Finish game', 'primary']);
       if (p === 'final') c.push(['export', 'Download results', 'primary'], ['new', 'New game', '']);
     }
-    c.push(['drawer', 'Desks & posts', ''], ['clean', document.body.classList.contains('clean') ? 'Show controls' : 'Hide controls', '']);
+    c.push(['drawer', 'Teams & posts', ''], ['clean', document.body.classList.contains('clean') ? 'Show controls' : 'Hide controls', '']);
     var sig = JSON.stringify(c) + busy;
     if (sig === ctrlSig) return;
     ctrlSig = sig;
@@ -94,7 +93,6 @@
     if (a === 'clean') { document.body.classList.toggle('clean'); ctrlSig = ''; renderTop(); return; }
     if (a === 'new') { if (armed(b)) { setupMode = true; stageSig = ''; ctrlSig = ''; render(); } return; }
     if (a === 'export') { exportCsv(); return; }
-    if (a.indexOf('pair:') === 0) { call({ action: 'pair', mode: a.split(':')[1] }); return; }
     if (a === 'extend') { call({ action: 'extend', secs: 30 }); return; }
     if (a === 'go') {
       busy = true; renderTop();
@@ -128,35 +126,34 @@
     var s = t && !setupMode && t.session;
     if (!s) { if (stageSig !== 'setup') { stageSig = 'setup'; st.innerHTML = setupHtml(); bindSetup(); } return; }
     var p = s.phase;
-    if (p === 'lobby') {
-      var sig = 'lobby' + JSON.stringify(t.players.map(function (x) { return x.sid; }));
+    if (p === 'lobby' || p === 'paired') {
+      var sig = 'lobby' + JSON.stringify([t.players, t.desks.map(function (d) { return [d.num, d.members]; })]);
       if (sig === stageSig) return;
       stageSig = sig;
-      var joined = {};
-      t.players.forEach(function (x) { joined[x.sid] = 1; });
+      var joined = {}, seated = {};
+      t.players.forEach(function (x) { joined[x.sid] = 1; if (x.desk) seated[x.sid] = 1; });
+      var waiting = t.roster.filter(function (r) { return joined[r.sid] && !seated[r.sid]; });
+      var absent = t.roster.filter(function (r) { return !joined[r.sid]; });
       st.innerHTML = '<div class="joinbox"><div class="qr" id="qr"></div><div><h1 class="tc-title">Check in</h1>' +
-        '<p>Open this link on your iPad and tap your name:</p><p class="url">' + bndEsc(studentUrl()) + '</p>' +
-        '<p class="tc-status"><span><span class="num">' + t.players.length + '</span> of ' + t.roster.length + ' checked in</span></p></div></div>' +
-        '<div class="namechips">' + t.roster.map(function (r) {
-          return '<span class="' + (joined[r.sid] ? '' : 'wait') + '">' + bndEsc(r.label) + '</span>';
-        }).join('') + '</div>';
+        '<p>Open the link, tap <b>your name</b>, then tap <b>your team number</b>. Partners tap the same number.</p>' +
+        '<p class="url">' + bndEsc(studentUrl()) + '</p>' +
+        '<p class="tc-status"><span><span class="num">' + Object.keys(seated).length + '</span>/' + t.roster.length + ' in a team</span>' +
+        '<span><span class="num">' + t.desks.length + '</span> teams</span></p></div></div>' +
+        (t.desks.length ? '<div class="teamgrid">' + t.desks.map(function (d) {
+          return '<div class="teamcard' + (d.members.length < 2 ? ' half' : '') + '"><b>' + d.num + '</b><i>' + bndEsc(d.name) + '</i><span>' +
+            d.members.map(function (m) { return bndEsc(m.label); }).join(' + ') + (d.members.length < 2 ? ' + \u2026' : '') + '</span></div>';
+        }).join('') + '</div>' : '') +
+        (waiting.length ? '<p class="tc-status" style="font-size:20px;margin-bottom:0">Choosing a team:</p><div class="namechips" style="margin-top:6px">' +
+          waiting.map(function (r) { return '<span>' + bndEsc(r.label) + '</span>'; }).join('') + '</div>' : '') +
+        (absent.length ? '<p class="tc-status" style="font-size:20px;margin-bottom:0;color:var(--muted)">Not checked in:</p><div class="namechips" style="margin-top:6px">' +
+          absent.map(function (r) { return '<span class="wait">' + bndEsc(r.label) + '</span>'; }).join('') + '</div>' : '');
       drawQr();
-      return;
-    }
-    if (p === 'paired') {
-      var sig2 = 'paired' + JSON.stringify(t.desks.map(function (d) { return [d.name, d.members]; }));
-      if (sig2 === stageSig) return;
-      stageSig = sig2;
-      st.innerHTML = '<h1 class="tc-title">Find your desk</h1><p class="tc-status">Sit with your partner. Each desk is a newsroom.</p><div class="deskgrid">' +
-        t.desks.map(function (d) {
-          return '<div class="deskcard"><h3>' + bndEsc(d.name) + '</h3><p>' + d.members.map(function (m) { return bndEsc(m.label); }).join(' + ') + '</p></div>';
-        }).join('') + '</div>';
       return;
     }
     // write / verify / reveal / final: status line, phase panel, gauge board
     var c = t.counts;
     var status = '';
-    if (p === 'write') status = '<span><span class="num">' + c.rolled + '</span>/' + t.desks.length + ' desks rolled</span>' +
+    if (p === 'write') status = '<span><span class="num">' + c.rolled + '</span>/' + t.desks.length + ' teams rolled</span>' +
       '<span><span class="num">' + c.filed + '</span>/' + c.seated + ' posts filed</span>' +
       (c.writing > c.filed ? '<span class="muted">' + (c.writing - c.filed) + ' still drafting</span>' : '');
     if (p === 'verify') status = '<span><span class="num">' + c.checks + '</span>/' + c.toCheck + ' fact-checks done</span>';
@@ -188,7 +185,7 @@
     var board = $('board'), axis = $('axis');
     if (!board) return;
     var desks = t.desks;
-    var LABH = 96;                               // label strip under each tube (matches --labh)
+    var LABH = 120;                              // label strip under each tube (matches --labh)
     var ids = desks.map(function (d) { return d.id; }).join();
     if (board.getAttribute('data-ids') !== ids) {
       board.setAttribute('data-ids', ids);
@@ -219,7 +216,7 @@
       var dl = deltas[d.id];
       var th = (dl && Date.now() - dl.at < 4000 ? '<small>+' + dl.v + '</small>' : '') + d.total;
       if (tot.innerHTML !== th) tot.innerHTML = th;
-      var lab = '<b>' + bndEsc(d.name) + '</b><span>' + d.members.map(function (m) { return bndEsc(m.label); }).join(' + ') + '</span>' +
+      var lab = '<span class="num">Team ' + d.num + '</span><b>' + bndEsc(d.name) + '</b><span>' + d.members.map(function (m) { return bndEsc(m.label); }).join(' + ') + '</span>' +
         '<span class="rk">#' + d.rank + '</span>';
       var le = g.querySelector('.lab');
       if (le.innerHTML !== lab) le.innerHTML = lab;
@@ -245,7 +242,7 @@
   function finalHtml() {
     var sorted = t.desks.slice().sort(function (a, b) { return a.rank - b.rank; });
     var win = sorted.filter(function (d) { return d.rank === 1; });
-    return '<h1 class="tc-title">' + win.map(function (d) { return bndEsc(d.name); }).join(' and ') + ' win' + (win.length > 1 ? '' : 's') + '!</h1>' +
+    return '<h1 class="tc-title">' + win.map(function (d) { return 'Team ' + d.num + ' ' + bndEsc(d.name); }).join(' and ') + ' win' + (win.length > 1 ? '' : 's') + '!</h1>' +
       '<p class="tc-status" style="font-weight:400">' + win.map(function (d) {
         return d.members.map(function (m) { return bndEsc(m.label); }).join(' + ') + ' — ' + d.total + ' points';
       }).join('<br>') + '</p>';
@@ -259,7 +256,7 @@
       '<label>Writing time<select id="sWrite"><option value="150">2:30</option><option value="180" selected>3:00</option><option value="240">4:00</option></select></label>' +
       '<label>Fact-check time<select id="sVerify"><option value="60">1:00</option><option value="90" selected>1:30</option><option value="120">2:00</option></select></label></div>' +
       '<button class="btn big primary" id="start" style="max-width:420px">Open check-in</button>' +
-      (BND_LIVE ? '' : '<p class="small muted" style="margin-top:18px">Demo mode: the game lives in this browser. Turn on <b>Simulate class</b> in Desks &amp; posts to fill it with pretend students, and open the student console in another tab to play one of them.</p>') +
+      (BND_LIVE ? '' : '<p class="small muted" style="margin-top:18px">Demo mode: the game lives in this browser. Turn on <b>Simulate class</b> in Teams &amp; posts to fill it with pretend students, and open the student console in another tab to play one of them.</p>') +
       '</div>';
   }
   function bindSetup() {
@@ -288,19 +285,19 @@
     var unseated = t.players.filter(function (p) { return !p.desk; });
     var lockMap = {};
     t.players.forEach(function (p) { lockMap[p.sid] = p.locked; });
-    var h = '<button class="btn close" data-x="close">Close</button><h2>Desks</h2>' +
-      '<p class="small muted">Tap a student, then <b>Move here</b> on another desk. A lock means she is signed in on one device; ' +
+    var h = '<button class="btn close" data-x="close">Close</button><h2>Teams</h2>' +
+      '<p class="small muted">Students choose their own team number. To fix a mistake, tap a student, then <b>Move here</b> on another team. A lock means she is signed in on one device; ' +
       '<b>Release</b> lets her sign in on a new one.</p>';
     if (selSid) h += '<p><b>Selected: ' + bndEsc(label(selSid)) + '</b> <button class="btn" data-x="release" style="min-height:36px">Release device</button> ' +
-      '<button class="btn" data-x="newdesk" style="min-height:36px">Move to a new desk</button> <button class="btn" data-x="unsel" style="min-height:36px">Cancel</button></p>';
+      '<button class="btn" data-x="newdesk" style="min-height:36px">Move to a new team</button> <button class="btn" data-x="unsel" style="min-height:36px">Cancel</button></p>';
     t.desks.forEach(function (d) {
-      h += '<div class="dk"><header>' + bndEsc(d.name) + ' <span class="muted">' + d.total + ' pts</span>' +
+      h += '<div class="dk"><header>Team ' + d.num + ' \u00b7 ' + bndEsc(d.name) + ' <span class="muted">' + d.total + ' pts</span>' +
         (selSid ? '<button class="btn" data-move="' + d.id + '">Move here</button>' : '') + '</header>' +
         d.members.map(function (m) {
           return '<button class="mem' + (selSid === m.sid ? ' sel' : '') + '" data-sid="' + m.sid + '">' + bndEsc(m.label) + (lockMap[m.sid] ? ' 🔒' : '') + '</button>';
         }).join('') + '</div>';
     });
-    if (unseated.length) h += '<div class="dk"><header>Not at a desk</header>' + unseated.map(function (m) {
+    if (unseated.length) h += '<div class="dk"><header>Not in a team yet</header>' + unseated.map(function (m) {
       return '<button class="mem' + (selSid === m.sid ? ' sel' : '') + '" data-sid="' + m.sid + '">' + bndEsc(m.label) + '</button>';
     }).join('') + '</div>';
     if (s.round) {

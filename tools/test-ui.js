@@ -28,18 +28,18 @@ require('fs').mkdirSync(OUT, { recursive: true });
   await S.waitForSelector('.names button');
   await S.screenshot({ path: OUT + '/s1-pick.png' });
   await S.click('.names button:has-text("Hana")');
-  await S.waitForSelector('text=You’re checked in');
+  await S.waitForSelector('.teams button');
+  await S.screenshot({ path: OUT + '/s2-teams.png' });
+  await S.click('.teams button[data-team="12"]');
+  await S.waitForSelector('text=Waiting for your partner');
 
   // turn on Simulate class
   await T.click('button[data-a="drawer"]');
   await T.check('#simBox');
   await T.click('button[data-x="close"]');
-  await T.waitForFunction(() => document.querySelectorAll('.namechips span:not(.wait)').length >= 20, null, { timeout: 30000 });
+  await T.waitForFunction(() => document.querySelectorAll('.teamcard:not(.half)').length >= 11, null, { timeout: 40000 });
   await T.screenshot({ path: OUT + '/t1-lobby.png' });
-  await T.click('button[data-a="pair:mixed"]');
-  await T.waitForSelector('.deskgrid');
-  await T.screenshot({ path: OUT + '/t2-desks.png' });
-  await S.waitForSelector('text=Sit with');
+  await S.waitForSelector('text=You are with');
   await S.screenshot({ path: OUT + '/s2-desk.png' });
 
   for (let round = 1; round <= 3; round++) {

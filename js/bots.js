@@ -34,10 +34,11 @@ function bndBotsTick(realSids) {
   var s = t.session;
   var real = {};
   realSids.forEach(function (x) { real[x] = 1; });
-  t.roster.forEach(function (st) {
+  t.roster.forEach(function (st, idx) {
     if (real[st.sid] || Math.random() < 0.45) return;          // act a little at a time, like real students
     var v = bndHandle({ action: 'state', sid: st.sid });
     if (!v.joined) { if (s.phase === 'lobby' || s.phase === 'paired') bndHandle({ action: 'join', sid: st.sid, device: 'bot-' + st.sid }); return; }
+    if (!v.desk) { bndHandle({ action: 'team', sid: st.sid, team: Math.floor(idx / 2) + 1 }); return; }
     if (s.phase === 'write' && v.desk) {
       if (!v.desk.words) { bndHandle({ action: 'roll', sid: st.sid }); return; }
       if (!v.myPost || !v.myPost.filed) bndHandle({ action: 'save', sid: st.sid, text: bndBotPost(v.desk.words), filed: true });

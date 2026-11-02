@@ -56,8 +56,8 @@
     var s = st.session;
     if (!s) return 'nosession';
     if (!st.joined) return 'rejoin';
-    if (!st.desk) return 'lobby';
-    if (s.phase === 'lobby' || s.phase === 'paired') return 'paired-' + st.desk.id + '-' + st.desk.members.length;
+    if (!st.desk) return 'team-' + JSON.stringify(st.teams || []);
+    if (s.phase === 'lobby' || s.phase === 'paired') return 'paired-' + st.desk.id + '-' + st.desk.members.map(function (m) { return m.sid; }).join('.');
     if (s.phase === 'write') return st.desk.words ? 'write-' + s.round : 'roll-' + s.round;
     if (s.phase === 'verify') return st.task ? (st.task.done ? 'checked-' + s.round : 'check-' + s.round) : 'nocheck-' + s.round;
     if (s.phase === 'reveal') return 'reveal-' + s.round + '-' + JSON.stringify(st.myPost && st.myPost.score);
@@ -70,7 +70,7 @@
     if (key !== screen || force) {
       screen = key;
       var k = key.split('-')[0];
-      var fn = { pick: pickScreen, loading: loadingScreen, nosession: waitScreen, rejoin: rejoinScreen, lobby: lobbyScreen,
+      var fn = { pick: pickScreen, loading: loadingScreen, nosession: waitScreen, rejoin: rejoinScreen, team: teamScreen,
         paired: pairedScreen, roll: rollScreen, write: writeScreen, check: checkScreen, checked: checkedScreen,
         nocheck: noCheckScreen, reveal: revealScreen, final: finalScreen }[k];
       app.innerHTML = '';
@@ -87,8 +87,8 @@
     if (!st || !st.desk) { topDesk.innerHTML = sid && st && st.me ? '<span>' + bndEsc(st.me.label) + '</span>' : ''; return; }
     var d = st.desk;
     var mates = d.members.filter(function (m) { return m.sid !== sid; }).map(function (m) { return m.label; }).join(' & ');
-    topDesk.innerHTML = '<div class="desk"><b>' + bndEsc(d.name) + '</b>' + bndEsc(st.me.label) + (mates ? ' with ' + bndEsc(mates) : '') +
-      '</div><div class="score" aria-label="Desk score">' + d.total + '</div>';
+    topDesk.innerHTML = '<div class="desk"><b>Team ' + d.num + ' \u00b7 ' + bndEsc(d.name) + '</b>' + bndEsc(st.me.label) + (mates ? ' with ' + bndEsc(mates) : '') +
+      '</div><div class="score" aria-label="Team score">' + d.total + '</div>';
   }
 
   function head(title, withTimer) {
@@ -145,11 +145,11 @@
 
   function howTo() {
     return '<div class="card soft"><h3>How it works</h3><ol class="steps">' +
-      '<li><b>Roll</b> the dice. Your desk gets two flood words.</li>' +
+      '<li><b>Roll</b> the dice. Your team gets two flood words.</li>' +
       '<li><b>Write</b> a breaking news post (15–25 words) that uses both words. A passive (<i>were evacuated</i>) earns a bonus.</li>' +
-      '<li><b>Fact-check</b> a post from another desk: are the words used with the right meaning?</li>' +
+      '<li><b>Fact-check</b> a post from another team: are the words used with the right meaning?</li>' +
       '<li><b>Watch the screen</b>: T.Chris picks the Front Page post each round.</li></ol>' +
-      '<p class="small muted" style="margin:6px 0 0">You and your partner each write your own post. Both scores go to your desk.</p></div>';
+      '<p class="small muted" style="margin:6px 0 0">You and your partner each write your own post. Both scores go to your team.</p></div>';
   }
 
   function waitScreen() {
@@ -164,17 +164,47 @@
     bindNotMe();
   }
 
-  function lobbyScreen() {
-    app.innerHTML = head('You’re checked in') + '<p class="lead">T.Chris is making the desks. Your desk and partner will appear here.</p>' + howTo() + notMe();
+  /* ---------- team number (students choose their own pairs) ---------- */
+  function teamScreen() {
+    var n = st.teamCount || 15, max = st.teamMax || 3, byNum = {};
+    (st.teams || []).forEach(function (t) { byNum[t.num] = t.members; });
+    var late = st.session.round > 0;
+    var h = head('Choose your team number') +
+      '<p class="lead">Tap the <b>same number as your partner</b>. T.Chris tells you your team number.</p>' +
+      (late ? '<p class="small muted">The game has started. Join your team now; you start from the next step.</p>' : '') +
+      '<div class="teams" id="teams">';
+    for (var i = 1; i <= n; i++) {
+      var mem = byNum[i] || [], full = mem.length >= max;
+      h += '<button data-team="' + i + '"' + (full ? ' disabled' : '') + ' aria-label="Team ' + i + (mem.length ? ', ' + mem.length + ' joined' : '') + '">' +
+        '<b>' + i + '</b><span>' + (mem.length ? mem.map(bndEsc).join(', ') : '&nbsp;') + '</span></button>';
+    }
+    app.innerHTML = h + '</div>' + notMe();
+    document.getElementById('teams').onclick = function (e) {
+      var b = e.target.closest('button[data-team]');
+      if (!b || busy) return;
+      busy = true;
+      this.querySelectorAll('button').forEach(function (x) { x.disabled = true; });
+      bndApi({ action: 'team', sid: sid, team: Number(b.getAttribute('data-team')) }).then(function (v) {
+        busy = false;
+        if (!v.ok) { lastError = v.error; render(true); poll(); return; }
+        apply(v);
+      }).catch(function () { busy = false; lastError = 'Not joined: no connection. Try again.'; render(true); });
+    };
     bindNotMe();
   }
 
   function pairedScreen() {
     var d = st.desk;
     var mates = d.members.filter(function (m) { return m.sid !== sid; });
-    app.innerHTML = head(bndEsc(d.name)) +
-      '<p class="lead">' + (mates.length ? 'Sit with <b>' + mates.map(function (m) { return bndEsc(m.label); }).join('</b> and <b>') + '</b>. You are a news desk now.'
-        : 'You are on your own for now. T.Chris may add a partner.') + '</p>' + howTo();
+    app.innerHTML = head('Team ' + d.num + ' \u00b7 ' + bndEsc(d.name)) +
+      '<p class="lead">' + (mates.length ? 'You are with <b>' + mates.map(function (m) { return bndEsc(m.label); }).join('</b> and <b>') +
+        '</b>. Sit together and wait for T.Chris to start.'
+        : 'Waiting for your partner to tap Team ' + d.num + '\u2026') + '</p>' +
+      '<p><button class="btn" id="leave">Wrong team? Change number</button></p>' + howTo();
+    document.getElementById('leave').onclick = function () {
+      this.disabled = true;
+      bndApi({ action: 'leaveTeam', sid: sid }).then(function (v) { if (!v.ok) { lastError = v.error; render(true); return; } apply(v); });
+    };
   }
 
   /* ---------- roll ---------- */
@@ -290,7 +320,7 @@
     var t = st.task;
     verdict = { ok: [null, null], stars: 0 };
     app.innerHTML = head('Fact-check', true) +
-      '<p class="lead">Read this post from another desk. Be fair: it’s their score.</p>' +
+      '<p class="lead">Read this post from another team. Be fair: it’s their score.</p>' +
       '<div class="card post-show"><span class="tag">BREAKING</span>' + bndHighlight(t.text, t.words) + '</div>' +
       t.words.map(function (w, i) {
         var x = BND_WORD_BY_ID[w];
@@ -331,7 +361,7 @@
   }
 
   function checkedScreen() {
-    app.innerHTML = head('Fact-check sent', true) + '<p class="lead">Thank you. That earned your desk +' + BND_RULES.ptsCheck +
+    app.innerHTML = head('Fact-check sent', true) + '<p class="lead">Thank you. That earned your team +' + BND_RULES.ptsCheck +
       '. Results appear on the big screen soon.</p>' + myPostCard();
     tickTimer();
   }
@@ -361,13 +391,13 @@
       h += '<table class="breakdown">' + rows.map(function (r) { return '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td></tr>'; }).join('') +
         '<tr class="total"><td>Your post</td><td>' + (sc.spiked ? '0 (removed by T.Chris)' : sc.total) + '</td></tr></table>';
     }
-    h += '<p class="small muted">Desk scores are scaled so a trio and a pair compete fairly.</p>';
+    h += '<p class="small muted">Team scores are scaled so a trio and a pair compete fairly.</p>';
     app.innerHTML = h;
   }
 
   function finalScreen() {
     var d = st.desk;
-    app.innerHTML = head('Final scores') + '<p class="lead">' + bndEsc(d.name) + ' finished</p>' +
+    app.innerHTML = head('Final scores') + '<p class="lead">Team ' + d.num + ' \u00b7 ' + bndEsc(d.name) + ' finished</p>' +
       '<div class="bigrank">#' + d.rank + ' <span class="muted" style="font-size:24px">of ' + d.deskCount + '</span></div>' +
       '<p class="lead">with <b>' + d.total + '</b> points.</p>' +
       ((st.front || []).length ? '<h3 style="margin-top:20px">Today’s Front Page</h3>' + st.front.map(function (f) {

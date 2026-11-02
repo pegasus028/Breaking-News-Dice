@@ -158,11 +158,11 @@ body.clean .tc-ctrl .btn:not(#btnClean) { display: none; }
 .deskcard p { margin: 6px 0 0; font-size: 22px; }
 
 /* the river-gauge leaderboard: one gauge staff per desk, water rises with the score */
-.gauge-wrap { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 8px; flex: 1 1 0; min-height: 250px; --labh: 96px; }
+.gauge-wrap { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 8px; flex: 1 1 0; min-height: 250px; --labh: 120px; }
 .gauge-axis { position: relative; }
 .gauge-axis span { position: absolute; right: 6px; transform: translateY(50%); font-weight: 700; font-size: 16px; color: var(--muted); }
 .gauge-board { display: grid; gap: 10px; grid-template-rows: minmax(0, 1fr); align-items: stretch; position: relative; min-height: 0; }
-.gauge { display: grid; grid-template-rows: minmax(0, 1fr) var(--labh, 96px); min-width: 0; min-height: 0; }
+.gauge { display: grid; grid-template-rows: minmax(0, 1fr) var(--labh, 120px); min-width: 0; min-height: 0; }
 .gauge .tube { position: relative; border-bottom: 4px solid var(--ink); }
 .gauge .staff { position: absolute; left: 0; bottom: 0; top: 0; width: 12px;
   background: repeating-linear-gradient(to top, var(--gauge-a) 0 calc(var(--seg) * .45), #fff calc(var(--seg) * .45) calc(var(--seg) * .5),
@@ -208,3 +208,19 @@ body.clean .tc-ctrl .btn:not(#btnClean) { display: none; }
 .gate form { display: grid; gap: 12px; width: min(360px, 90vw); }
 .gate input { border: 3px solid var(--ink); border-radius: var(--radius); padding: 12px; font-size: 28px; text-align: center; letter-spacing: .3em; }
 body.offline .tc-top { border-bottom-color: var(--alert); }
+
+/* team-number picker (students choose their own pairs) */
+.teams { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; margin: 12px 0; }
+.teams button { border: 3px solid var(--ink); border-radius: var(--radius); background: var(--paper); min-height: 92px;
+  display: grid; align-content: center; justify-items: center; gap: 2px; padding: 6px; }
+.teams button b { font-family: var(--display); font-weight: 800; font-size: 36px; line-height: 1; }
+.teams button span { font-size: 13px; color: var(--ink-2); line-height: 1.2; text-align: center; overflow-wrap: anywhere; }
+.teams button:hover:not(:disabled) { background: var(--flood-soft); border-color: var(--flood); }
+.teams button:disabled { border-color: #c4c4c4; color: #9a9a9a; }
+.teamgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.teamcard { border: 3px solid var(--ink); border-radius: var(--radius); padding: 8px 12px; display: grid; grid-template-columns: auto 1fr; gap: 0 12px; align-items: center; }
+.teamcard.half { border-style: dashed; }
+.teamcard b { font-family: var(--display); font-weight: 800; font-size: 40px; line-height: 1; grid-row: span 2; }
+.teamcard i { font-style: normal; font-size: 15px; color: var(--muted); }
+.teamcard span { font-weight: 700; font-size: 20px; line-height: 1.2; }
+.gauge .lab .num { font-family: var(--display); font-weight: 800; font-size: 15px; color: var(--ink); }

@@ -22,15 +22,25 @@ ok(!JSON.stringify(roster0).includes('band'), 'roster hides bands');
 const early = roster0.slice(0, roster0.length - 3);
 early.forEach(s => ok(H({ action: 'join', sid: s.sid, device: 'dev' + s.sid }).ok, 'join ' + s.label));
 ok(!H({ action: 'join', sid: early[0].sid, device: 'other' }).ok, 'second device blocked');
-t = H({ action: 'pair', pin: PIN, mode: 'mixed' });
+// students tap their pre-assigned team numbers: pairs 1..n in roster order, last odd one makes a trio
+early.forEach((st, i) => {
+  const team = Math.min(Math.floor(i / 2) + 1, Math.floor(early.length / 2));
+  const v = H({ action: 'team', sid: st.sid, team });
+  ok(v.ok && v.desk && v.desk.num === team, 'team ' + team + ' for ' + st.label);
+});
+// a fourth student cannot squeeze into a trio
+ok(!H({ action: 'team', sid: early[0].sid, team: Math.floor(early.length / 2) }).ok || early.length % 2 === 0, 'full team rejected');
+// changing number before the start works and empties the old team
+ok(H({ action: 'team', sid: early[0].sid, team: 15 }).desk.num === 15, 'change team');
+ok(H({ action: 'team', sid: early[0].sid, team: 1 }).desk.num === 1, 'change back');
+ok(!H({ action: 'team', sid: early[0].sid, team: 0 }).ok, 'bad number rejected');
+t = H({ action: 'tstate', pin: PIN });
 const sizes = t.desks.map(d => d.members.length);
-console.log('desks', t.desks.length, 'sizes', sizes.join(','));
-ok(sizes.every(n => n === 2 || n === 3) && sizes.filter(n => n === 3).length <= 1, 'pair sizes');
-// mixed ability check
-const band = {}; ctx.ROSTER.forEach(r => band[r.sid] = r.band);
-t.desks.forEach(d => { const b = d.members.map(m => band[m.sid]); ok(Math.max(...b) - Math.min(...b) >= 1 || b.every(x => x === 2 || x === 3), 'mixed ' + d.name + ' ' + b); });
-// two latecomers arrive
-roster0.slice(-3, -1).forEach(s => H({ action: 'join', sid: s.sid, device: 'dev' + s.sid }));
+console.log('teams', t.desks.map(d => d.num).join(','), 'sizes', sizes.join(','));
+ok(sizes.every(n => n === 2 || n === 3), 'team sizes');
+ok(!t.desks.some(d => d.num === 15), 'empty team removed');
+// two latecomers arrive and pick a new team number
+roster0.slice(-3, -1).forEach(s => { H({ action: 'join', sid: s.sid, device: 'dev' + s.sid }); H({ action: 'team', sid: s.sid, team: 14 }); });
 t = H({ action: 'tstate', pin: PIN });
 ok(t.players.every(p => p.desk), 'latecomers seated');
 const used = {};
@@ -38,8 +48,15 @@ for (let round = 1; round <= 3; round++) {
   t = H({ action: 'go', pin: PIN, from: { phase: t.session.phase, round: t.session.round } });
   ok(t.session.phase === 'write' && t.session.round === round, 'round ' + round + ' write');
   // double click is harmless
-  const again = H({ action: 'go', pin: PIN, from: { phase: 'paired', round: round - 1 } });
+  const again = H({ action: 'go', pin: PIN, from: { phase: 'lobby', round: round - 1 } });
   ok(again.session.phase === 'write' && again.session.round === round, 'double click ignored');
+  if (round === 1) {
+    ok(!H({ action: 'team', sid: t.players[0].sid, team: 13 }).ok, 'team locked after start');
+    const last = roster0[roster0.length - 1];
+    H({ action: 'join', sid: last.sid, device: 'dev' + last.sid });
+    ok(H({ action: 'team', sid: last.sid, team: 14 }).desk.num === 14, 'very late student joins mid-game');
+    t = H({ action: 'tstate', pin: PIN });
+  }
   t.players.forEach(p => {
     const v = H({ action: 'roll', sid: p.sid });
     ok(v.desk.words && v.desk.words.length === 2 && v.desk.words[0] !== v.desk.words[1], 'roll');

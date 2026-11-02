@@ -202,6 +202,8 @@ var BND_DESK_NAMES = ['Chao Phraya Chronicle', 'Klong Courier', 'Monsoon Mail', 
   'Soi Sentinel', 'Dusit Dispatch', 'Thonburi Times', 'Bang Na Bulletin', 'Silom Standard',
   'Pratunam Post', 'Ari Herald', 'Rama IV Record', 'Lumpini Ledger', 'Rangsit Wire', 'Nonthaburi News',
   'Ayutthaya Advertiser'];
+var BND_TEAM_COUNT = 15;         // team numbers 1–15 on the student screen
+var BND_TEAM_MAX = 3;            // a team is a pair; a trio is allowed
 var BND_GRACE_MS = 15000;          // late saves accepted this long after a timer ends
 var BND_CACHE_KEY = 'bnd-store-v1';
 
@@ -288,6 +290,8 @@ function bndHandle(req) {
     if (a === 'roll') return bndRoll_(req);
     if (a === 'save') return bndSave_(req);
     if (a === 'check') return bndCheck_(req);
+    if (a === 'team') return bndTeam_(req);
+    if (a === 'leaveTeam') return bndLeaveTeam_(req);
     // teacher actions
     if (typeof TEACHER_PIN !== 'undefined' && TEACHER_PIN && String(req.pin || '') !== String(TEACHER_PIN)) {
       return { ok: false, error: 'pin' };
@@ -295,7 +299,6 @@ function bndHandle(req) {
     if (a === 'tstate') return bndTeacherState_(bndRead_(true));
     if (a === 'newSession') return bndNewSession_(req);
     if (a === 'settings') return bndSettings_(req);
-    if (a === 'pair') return bndPair_(req);
     if (a === 'move') return bndMove_(req);
     if (a === 'release') return bndRelease_(req);
     if (a === 'go') return bndGo_(req);
@@ -323,11 +326,6 @@ function bndLabel_(sid) {
   var r = bndRosterPublic_();
   for (var i = 0; i < r.length; i++) if (r[i].sid === String(sid)) return r[i].label;
   return 'No. ' + sid;
-}
-function bndBand_(sid) {
-  var r = bndRoster_();
-  for (var i = 0; i < r.length; i++) if (String(r[i].sid) === String(sid)) return r[i].band || 2;
-  return 2;
 }
 
 /* ---------- session ---------- */
@@ -375,15 +373,16 @@ function bndDeskOf_(s, sid) {
   for (var i = 0; i < s.desks.length; i++) if (s.desks[i].members.indexOf(String(sid)) >= 0) return s.desks[i];
   return null;
 }
-function bndNextDeskName_(s) {
-  var used = s.desks.map(function (d) { return d.name; });
-  for (var i = 0; i < BND_DESK_NAMES.length; i++) if (used.indexOf(BND_DESK_NAMES[i]) < 0) return BND_DESK_NAMES[i];
-  return 'Desk ' + (s.desks.length + 1);
+/* Team n is desk 'd' + n with a fixed newsroom name, so the number students tap is the number on the board. */
+function bndDeskByNum_(s, n) {
+  for (var i = 0; i < s.desks.length; i++) if (s.desks[i].num === n) return s.desks[i];
+  var d = { id: 'd' + n, num: n, name: BND_DESK_NAMES[n - 1] || 'Desk ' + n, members: [] };
+  s.desks.push(d);
+  s.desks.sort(function (a, b) { return a.num - b.num; });
+  return d;
 }
-function bndNewDeskId_(s) {
-  var n = 1;
-  while (s.desks.some(function (d) { return d.id === 'd' + n; })) n++;
-  return 'd' + n;
+function bndTidyDesks_(s) {
+  s.desks = s.desks.filter(function (d) { return d.members.length > 0 || (s.rolls[d.id] && Object.keys(s.rolls[d.id]).length); });
 }
 
 /* ---------- student actions ---------- */
@@ -398,11 +397,45 @@ function bndJoin_(req) {
       return { ok: false, error: 'This name is already signed in on another device. Ask T.Chris to release it.' };
     }
     s.players[sid] = { joined: p ? p.joined : Date.now(), device: req.device || (p && p.device) || '' };
-    // late arrival after pairing: add to the smallest desk
-    if (s.desks.length && !bndDeskOf_(s, sid)) {
-      var smallest = s.desks.slice().sort(function (x, y) { return x.members.length - y.members.length; })[0];
-      smallest.members.push(sid);
+    bndWrite_(db, 'session', s);
+    return bndStudentView_(db, sid);
+  });
+}
+
+/* Student taps a team number; two students with the same number are partners. */
+function bndTeam_(req) {
+  var sid = String(req.sid || '');
+  var n = Math.floor(Number(req.team));
+  if (!(n >= 1 && n <= BND_TEAM_COUNT)) return { ok: false, error: 'Choose a team number from 1 to ' + BND_TEAM_COUNT + '.' };
+  return bndWithLock_(function (db) {
+    var s = bndSession_(db);
+    if (!s || !s.players[sid]) return { ok: false, error: 'Tap your name first.' };
+    var from = bndDeskOf_(s, sid);
+    if (from && from.num === n) return bndStudentView_(db, sid);
+    if (from && s.round > 0) return { ok: false, error: 'Teams are locked once the game starts. Ask T.Chris to move you.' };
+    var to = bndDeskByNum_(s, n);
+    if (to.members.length >= BND_TEAM_MAX) {
+      bndTidyDesks_(s);
+      return { ok: false, error: 'Team ' + n + ' is full. Check your team number with T.Chris.' };
     }
+    if (from) from.members = from.members.filter(function (m) { return m !== sid; });
+    to.members.push(sid);
+    bndTidyDesks_(s);
+    bndWrite_(db, 'session', s);
+    return bndStudentView_(db, sid);
+  });
+}
+
+/* Leave a team before the game starts (to pick another number). */
+function bndLeaveTeam_(req) {
+  var sid = String(req.sid || '');
+  return bndWithLock_(function (db) {
+    var s = bndSession_(db);
+    var from = s && bndDeskOf_(s, sid);
+    if (!from) return bndStudentView_(db, sid);
+    if (s.round > 0) return { ok: false, error: 'Teams are locked once the game starts. Ask T.Chris to move you.' };
+    from.members = from.members.filter(function (m) { return m !== sid; });
+    bndTidyDesks_(s);
     bndWrite_(db, 'session', s);
     return bndStudentView_(db, sid);
   });
@@ -498,35 +531,6 @@ function bndCheck_(req) {
 }
 
 /* ---------- teacher actions ---------- */
-function bndShuffle_(arr) {
-  for (var i = arr.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = arr[i]; arr[i] = arr[j]; arr[j] = t; }
-  return arr;
-}
-
-function bndPair_(req) {
-  return bndWithLock_(function (db) {
-    var s = bndSession_(db);
-    if (!s) return { ok: false, error: 'no session' };
-    if (s.round > 0) return { ok: false, error: 'Pairs are locked once round 1 starts. Use Move instead.' };
-    var sids = bndShuffle_(Object.keys(s.players));
-    if (req.mode !== 'random') {
-      // mixed ability: strongest with weakest, working inwards
-      sids.sort(function (a, b) { return bndBand_(a) - bndBand_(b); });
-    }
-    var groups = [];
-    var lo = 0, hi = sids.length - 1;
-    while (lo < hi) { groups.push([sids[lo], sids[hi]]); lo++; hi--; }
-    if (lo === hi) {
-      if (groups.length) groups[groups.length - 1].push(sids[lo]); else groups.push([sids[lo]]);
-    }
-    var names = bndShuffle_(BND_DESK_NAMES.slice());
-    s.desks = groups.map(function (g, i) { return { id: 'd' + (i + 1), name: names[i] || 'Desk ' + (i + 1), members: g }; });
-    s.rolls = {};
-    if (s.phase === 'lobby') s.phase = 'paired';
-    bndWrite_(db, 'session', s);
-    return bndTeacherState_(db);
-  });
-}
 
 function bndMove_(req) {
   return bndWithLock_(function (db) {
@@ -535,12 +539,14 @@ function bndMove_(req) {
     var from = bndDeskOf_(s, sid);
     if (from) from.members = from.members.filter(function (m) { return m !== sid; });
     if (req.desk === 'new') {
-      s.desks.push({ id: bndNewDeskId_(s), name: bndNextDeskName_(s), members: [sid] });
+      var n = 1;
+      while (n <= BND_TEAM_COUNT && s.desks.some(function (d) { return d.num === n; })) n++;
+      bndDeskByNum_(s, n).members.push(sid);
     } else if (req.desk) {
       var to = s.desks.filter(function (d) { return d.id === req.desk; })[0];
       if (to) to.members.push(sid);
     }
-    s.desks = s.desks.filter(function (d) { return d.members.length > 0 || (s.rolls[d.id] && Object.keys(s.rolls[d.id]).length); });
+    bndTidyDesks_(s);
     bndWrite_(db, 'session', s);
     return bndTeacherState_(db);
   });
@@ -563,7 +569,7 @@ function bndGo_(req) {
     if (req.from && (req.from.phase !== s.phase || Number(req.from.round) !== s.round)) return bndTeacherState_(db);
     var now = Date.now();
     if (s.phase === 'lobby' || s.phase === 'paired' || s.phase === 'reveal') {
-      if (!s.desks.length) return { ok: false, error: 'Make the desks first.' };
+      if (!s.desks.length) return { ok: false, error: 'No teams yet: students tap their name, then their team number.' };
       if (s.phase === 'reveal' && s.round >= s.rounds) { s.phase = 'final'; s.phaseEnds = 0; }
       else { s.round += 1; s.phase = 'write'; s.phaseEnds = now + s.writeSecs * 1000; s.writeClosedAt = 0; }
     } else if (s.phase === 'write') {
@@ -654,7 +660,7 @@ function bndExport_() {
   Object.keys(sc.posts).forEach(function (k) {
     var p = db.map[k], b = sc.posts[k];
     var desk = s.desks.filter(function (d) { return d.id === p.desk; })[0];
-    rows.push([p.round, desk ? desk.name : p.desk, bndLabel_(p.sid), p.words[0], p.words[1], p.text, b.count,
+    rows.push([p.round, desk ? 'Team ' + desk.num + ' ' + desk.name : p.desk, bndLabel_(p.sid), p.words[0], p.words[1], p.text, b.count,
       b.passive ? 'yes' : 'no', b.autoPts, b.peerPts, b.stars, b.front ? 'yes' : '', b.total]);
   });
   return { ok: true, rows: rows };
@@ -718,7 +724,7 @@ function bndScores_(db) {
     var raw = (deskPts[d.id] || 0) + (checkPts[d.id] || 0);
     var byRound = {};
     Object.keys(deskRound[d.id] || {}).forEach(function (r) { byRound[r] = Math.round(deskRound[d.id][r] * 2 / size); });
-    return { id: d.id, name: d.name, members: d.members.map(function (m) { return { sid: m, label: bndLabel_(m) }; }),
+    return { id: d.id, num: d.num, name: d.name, members: d.members.map(function (m) { return { sid: m, label: bndLabel_(m) }; }),
       total: Math.round(raw * 2 / size), byRound: byRound, checkPts: checkPts[d.id] || 0 };
   });
   var sorted = desks.slice().sort(function (a, b) { return b.total - a.total; });
@@ -761,10 +767,15 @@ function bndStudentView_(db, sid) {
   out.joined = !!s.players[sid];
   out.me = { sid: sid, label: bndLabel_(sid) };
   var desk = bndDeskOf_(s, sid);
+  out.teamCount = BND_TEAM_COUNT;
+  out.teamMax = BND_TEAM_MAX;
+  if (!desk || s.round === 0) {
+    out.teams = s.desks.map(function (d) { return { num: d.num, members: d.members.map(bndLabel_) }; });
+  }
   if (!desk) return out;
   var sc = bndScores_(db);
   var ds = sc.desks.filter(function (d) { return d.id === desk.id; })[0];
-  out.desk = { id: desk.id, name: desk.name, members: ds.members, total: ds.total, rank: ds.rank,
+  out.desk = { id: desk.id, num: desk.num, name: desk.name, members: ds.members, total: ds.total, rank: ds.rank,
     deskCount: s.desks.length, byRound: ds.byRound,
     words: (s.rolls[desk.id] || {})[s.round] || null };
   var myKey = bndPostKey_(s.round, sid);
@@ -792,7 +803,7 @@ function bndFrontList_(db, s) {
     var p = db.map[s.front[r]];
     if (!p) return null;
     var d = s.desks.filter(function (x) { return x.id === p.desk; })[0];
-    return { round: Number(r), key: s.front[r], text: p.text, words: p.words, desk: d ? d.name : '', author: bndLabel_(p.sid) };
+    return { round: Number(r), key: s.front[r], text: p.text, words: p.words, desk: d ? 'Team ' + d.num + ' ' + d.name : '', author: bndLabel_(p.sid) };
   }).filter(Boolean).sort(function (a, b) { return a.round - b.round; });
 }
 
@@ -812,7 +823,7 @@ function bndTeacherState_(db) {
     return d;
   });
   var deskName = {};
-  s.desks.forEach(function (d) { deskName[d.id] = d.name; });
+  s.desks.forEach(function (d) { deskName[d.id] = 'Team ' + d.num + ' ' + d.name; });
   out.posts = Object.keys(sc.posts).map(function (k) {
     var p = db.map[k];
     var b = sc.posts[k];

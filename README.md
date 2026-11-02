@@ -1,21 +1,20 @@
 # Breaking News Dice
 
 A 20-minute pair game for English 4 (EN32102), Unit 5 *When the Water Came*.
-Each desk (a pair, or one trio) rolls two of the 15 flood words, each student writes a
+Each team (a pair, or a trio) rolls two of the 15 flood words, each student writes a
 15–25-word breaking news post that uses both words, then fact-checks a post from
 another desk. The teacher board on the projector shows live desk totals as rising
 water on river gauges.
 
 - `student.html` — student console (iPad/phone): tap your name, then follow the steps.
-- `teacher.html` — teacher board for the projector: run the phases, edit desks, remove posts, pick the Front Page.
+- `teacher.html` — teacher board for the projector: run the phases, fix teams, remove posts, pick the Front Page.
 - `demo.html` — board and one student side by side, in Demo mode.
 
 ## Running a game (about 20 minutes)
 
 | Step | Time | What happens |
 |---|---|---|
-| Check in | 1–2 min | Students scan the QR code on the board and tap their names. |
-| Make desks | 30 s | **Mixed-ability desks** pairs the strongest with the weakest (from the roster bands); **Random desks** shuffles. An odd student joins a desk as a trio. Latecomers join the smallest desk automatically. |
+| Check in | 1–2 min | Students scan the QR code on the board, tap their name, then tap their **team number** (1–15). Partners tap the same number; T.Chris tells them their number. A team is a pair, or a trio at most. Teams fill in live on the board. Before round 1 a student can change her number; after that, use **Move** in Teams & posts. Latecomers can still tap a team number mid-game. |
 | Round × 3 | 5–6 min each | **Write** (3:00): roll, write, file. Live checks show both words, length, passive bonus and passive errors such as *was subsided*. **Fact-check** (1:30): each student judges one post from another desk. **Results**: pick the Front Page from the top three. |
 | Finish | 1 min | Winner and scores; **Download results** saves every post as CSV. |
 
