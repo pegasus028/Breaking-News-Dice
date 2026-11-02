@@ -96,7 +96,7 @@
     var needPassive = !(st && st.session && st.session.requirePassive === false);
     return '<div class="card soft"><h3>How it works</h3><ol class="steps">' +
       '<li><b>Roll</b> the dice to get two flood words.</li>' +
-      '<li><b>Write</b> a breaking news post: both words, ' + BND_RULES.minWords + '–' + BND_RULES.maxWords + ' words' +
+      '<li><b>Write</b> a breaking news post: both words, at least ' + BND_RULES.minWords + ' words (aim for ' + BND_RULES.minWords + '–' + BND_RULES.maxWords + ')' +
       (needPassive ? ', at least one passive (<i>were evacuated</i>)' : '') + '. You can file only when every rule is met.</li>' +
       '<li><b>Bonus points</b> for complex sentences (<i>which, although, has been, families displaced by…</i>) and richer vocabulary.</li>' +
       '<li><b>Fact-check</b> one classmate’s post, then your next round starts. Go at your own speed: more rounds, more points.</li></ol></div>';
@@ -186,7 +186,7 @@
           bndEsc(x.word) + '<span class="pos">' + bndEsc(x.pos) + ' · tap for help</span></button>';
       }).join('') + '</div>' +
       '<label class="post-head" for="post"><span class="tag">BREAKING</span><b>Your news post</b></label>' +
-      '<textarea id="post" class="post-in" maxlength="600" placeholder="e.g. Hundreds of families were evacuated from…" autocomplete="off" autocapitalize="sentences"></textarea>' +
+      '<textarea id="post" class="post-in" maxlength="2000" placeholder="e.g. Hundreds of families were evacuated from…" autocomplete="off" autocapitalize="sentences"></textarea>' +
       '<p class="small" style="margin:10px 0 2px"><b>To file, you need</b></p><ul class="checks" id="must" aria-live="polite"></ul>' +
       '<button class="btn big primary" id="file">File my post</button>' +
       '<p class="small" style="margin:14px 0 2px"><b>Bonus points</b></p><ul class="checks" id="bonus"></ul>';
@@ -213,7 +213,7 @@
     var a = bndAnalyse(draft.text, st.words), R = BND_RULES, needPassive = st.session.requirePassive !== false;
     var h = '';
     st.words.forEach(function (w, i) { h += li(a.used[i], 'Use <b>' + bndEsc(bndWordName(w)) + '</b>', '+' + R.ptsWord); });
-    h += li(a.inRange, a.count + ' words <span class="muted">(' + R.minWords + '–' + R.maxWords + ')</span>', '+' + R.ptsLength);
+    h += li(a.inRange, a.count + ' words <span class="muted">(at least ' + R.minWords + '; aim for ' + R.minWords + '–' + R.maxWords + ')</span>', '+' + R.ptsLength);
     h += li(a.passive, (a.passive ? 'Passive: <i>' + bndEsc(a.passives[0]) + '</i>' : 'A passive (<i>be + past participle</i>)') + (needPassive ? '' : ' <span class="muted">(optional)</span>'), '+' + R.ptsPassive);
     a.traps.forEach(function (t) { h += li('trap', bndEsc(t.msg), ''); });
     must.innerHTML = h;

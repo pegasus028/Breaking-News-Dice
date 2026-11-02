@@ -3,7 +3,7 @@
    backend (the score that counts). Plain ES5-style functions, no DOM. */
 var BND_RULES = {
   minWords: 15,
-  maxWords: 25,
+  maxWords: 25,      // guidance only: longer posts are fine
   ptsWord: 2,        // each dice word found (any listed form)
   ptsLength: 1,      // post is 15–25 words
   ptsPassive: 2,     // at least one passive (be/get + past participle)
@@ -109,7 +109,7 @@ function bndAnalyse(text, ids) {
   text = String(text || '');
   var used = (ids || []).map(function (id) { return bndWordRegex(id).test(text); });
   var count = bndCountWords(text);
-  var inRange = count >= BND_RULES.minWords && count <= BND_RULES.maxWords;
+  var inRange = count >= BND_RULES.minWords;   // a minimum only; 15–25 is shown as guidance
   var p = bndPassives(text);
   var passive = p.passives.length > 0;
   var R = BND_RULES;

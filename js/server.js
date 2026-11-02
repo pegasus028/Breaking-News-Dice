@@ -200,7 +200,7 @@ function bndCheckKey_(round, sid) { return 'check:' + round + ':' + sid; }
 function bndCriteria_(a, s) {
   var miss = [];
   if (!a.used[0] || !a.used[1]) miss.push('use both dice words');
-  if (!a.inRange) miss.push('write ' + BND_RULES.minWords + '–' + BND_RULES.maxWords + ' words');
+  if (!a.inRange) miss.push('write at least ' + BND_RULES.minWords + ' words');
   if (s.requirePassive && !a.passive) miss.push('include a passive');
   if (a.traps.length) miss.push('fix the passive error');
   return miss;
@@ -261,7 +261,7 @@ function bndPickWords_(db, sid) {
 
 function bndSave_(req) {
   var sid = String(req.sid || '');
-  var text = String(req.text || '').slice(0, 600);
+  var text = String(req.text || '').slice(0, 2000);
   return bndWithLock_(function (db) {
     var r = bndSaveIn_(db, sid, text, !!req.filed);
     if (!r.ok) { var v = bndStudentView_(db, sid); v.ok = false; v.error = r.error; v.missing = r.missing; return v; }
@@ -459,9 +459,9 @@ function bndStudentState_(req) {
     // piggy-backed autosave: only takes the lock when the text has changed
     var p0 = bndPlayer_(db, sid);
     var old = p0 && db.map[bndPostKey_(p0.round, sid)];
-    if (p0 && p0.stage === 'write' && p0.words && (!old || old.text !== String(req.draft).slice(0, 600))) {
+    if (p0 && p0.stage === 'write' && p0.words && (!old || old.text !== String(req.draft).slice(0, 2000))) {
       return bndWithLock_(function (db2) {
-        bndSaveIn_(db2, sid, String(req.draft).slice(0, 600), false);
+        bndSaveIn_(db2, sid, String(req.draft).slice(0, 2000), false);
         return bndStudentView_(db2, sid);
       });
     }

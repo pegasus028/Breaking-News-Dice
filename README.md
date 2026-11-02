@@ -2,7 +2,7 @@
 
 A speed-based writing game for English 4 (EN32102), Unit 5 *When the Water Came*.
 Each student signs in by tapping her name and plays at her own pace: roll two of the 15 flood
-words, write a 15–25-word breaking news post that meets every rule, fact-check a classmate's
+words, write a breaking news post (at least 15 words; 15–25 is the guide) that meets every rule, fact-check a classmate's
 post, next round. The teacher board on the projector shows a live leaderboard (water levels).
 
 - `student.html` — student page (iPad/phone): tap your name, then follow the steps.
@@ -16,7 +16,7 @@ post, next round. The teacher board on the projector shows a live leaderboard (w
 3. **Each student plays at her own speed**, up to 20 rounds (setting):
    - **Roll** two words (she gets all 15 before any repeats).
    - **Write** and **file**: the File button unlocks only when every rule is met — both dice words,
-     15–25 words, a passive (setting; on by default) and no passive error such as *was subsided*.
+     at least 15 words (15–25 shown as a guide; no upper limit), a passive (setting; on by default) and no passive error such as *was subsided*.
    - **Fact-check** one classmate's post (least-checked first; a practice post if nobody else has filed),
      then the next round starts straight away. More rounds = more points.
 4. The board shows the leaderboard and the best fact-checked posts: tap **Front Page** (+5) any time.
@@ -25,7 +25,7 @@ post, next round. The teacher board on the projector shows a live leaderboard (w
 
 ## Scoring
 
-Per filed post: each dice word +2 · 15–25 words +1 · a passive +2 ·
+Per filed post: each dice word +2 · 15+ words +1 · a passive +2 ·
 bonus: +1 per kind of complex structure (subordinate clause, relative clause, advanced passive such as
 *has been / is being / must be / is thought to*, participle phrase such as *families displaced by*), max +3 ·
 +1 per extra Unit 5 word (max +2) · +1 for three long words (9+ letters) ·

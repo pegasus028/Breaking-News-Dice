@@ -204,7 +204,7 @@
   /* ---------------- setup (no game yet) ---------------- */
   function setupHtml() {
     return '<div class="setup"><h1 class="tc-title">Breaking News Dice</h1>' +
-      '<p>Each student taps her name and plays at her own speed: roll two Unit 5 flood words, write a 15–25-word breaking news post ' +
+      '<p>Each student taps her name and plays at her own speed: roll two Unit 5 flood words, write a breaking news post (at least 15 words, aim for 15–25) ' +
       'that meets every rule, fact-check a classmate’s post, next round. Bonus points for complex sentences and richer vocabulary.</p>' +
       '<div class="row"><label>Most rounds per student<select id="sRounds"><option value="10">10</option><option value="15">15</option><option value="20" selected>20</option></select></label>' +
       '<label class="tick"><input type="checkbox" id="sPassive" checked> A passive is required to file</label></div>' +
