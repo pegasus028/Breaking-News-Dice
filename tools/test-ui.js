@@ -7,13 +7,17 @@ const BASE = 'http://127.0.0.1:8765/';
 require('fs').mkdirSync(OUT, { recursive: true });
 (async () => {
   let browser;
-  try { browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium/chrome-linux/chrome' }); }
+  const glob = d => { try { return require('fs').readdirSync(d); } catch (e) { return []; } };
+  const exe = process.env.CHROME || glob('/opt/pw-browsers').filter(d => /^chromium-\d+$/.test(d)).sort().reverse()
+    .map(d => ['chrome-linux64', 'chrome-linux'].map(x => '/opt/pw-browsers/' + d + '/' + x + '/chrome')).flat()
+    .find(f => require('fs').existsSync(f));
+  try { browser = await chromium.launch(exe ? { executablePath: exe } : {}); }
   catch (e) { browser = await chromium.launch(); }
   const ctx = await browser.newContext();
   const errors = [];
   const watch = (p, name) => {
     p.on('pageerror', e => errors.push(name + ': ' + e.message));
-    p.on('console', m => { if (m.type() === 'error' && !/fonts|qrcode|cdnjs|ERR_/.test(m.text())) errors.push(name + ' console: ' + m.text()); });
+    p.on('console', m => { if (m.type() === 'error' && !/fonts|qrcode|cdnjs|ERR_/.test(m.text()) && !/favicon/.test((m.location() || {}).url || '')) errors.push(name + ' console: ' + m.text() + ' ' + ((m.location() || {}).url || '')); });
   };
   const T = await ctx.newPage(); watch(T, 'teacher');
   await T.setViewportSize({ width: 1280, height: 720 });
@@ -23,6 +27,16 @@ require('fs').mkdirSync(OUT, { recursive: true });
   await T.screenshot({ path: OUT + '/t0-setup.png' });
   await T.click('#start');
   await T.waitForSelector('.joinbox');
+
+  // the page is never empty before the script runs (static briefing + noscript)
+  const NJ = await browser.newContext({ javaScriptEnabled: false });
+  const nj = await NJ.newPage();
+  await nj.setViewportSize({ width: 360, height: 740 });
+  await nj.goto(BASE + 'student.html?demo');
+  const noJs = await nj.evaluate(() => document.querySelector('#app').innerText);
+  if (!/Your mission/.test(noJs) || !/needs JavaScript/.test(noJs)) errors.push('no static briefing / noscript message without JS');
+  await nj.screenshot({ path: OUT + '/s0-nojs.png', fullPage: true });
+  await NJ.close();
 
   const S = await ctx.newPage(); watch(S, 'student');
   await S.setViewportSize({ width: 390, height: 844 });
@@ -58,7 +72,41 @@ require('fs').mkdirSync(OUT, { recursive: true });
     }
     await S.fill('#post', good);
     await S.waitForTimeout(200);
-    if (round === 1) await S.screenshot({ path: OUT + '/s3-write.png', fullPage: true });
+    if (round === 1) {
+      // newsroom tools: phrasebank chip, reporter mission, help-sheet phrases, pace timer, copy
+      if (!/Practice mode/.test(await S.$eval('#saveNote', e => e.innerText))) errors.push('practice-mode banner missing');
+      await S.click('#phrasebank summary');
+      await S.click('.pb-chip:has-text("According to officials")');
+      const after = await S.$eval('#post', t => t.value);
+      if (!/According to officials, $/.test(after)) errors.push('phrasebank chip did not append: ' + JSON.stringify(after.slice(-40)));
+      await S.fill('#post', 'According to officials, ' + good + ' They had warned residents; nevertheless, water levels have risen.');
+      await S.click('#mission summary');
+      await S.waitForTimeout(150);
+      const mc = await S.$eval('#mcount', e => e.textContent);
+      if (mc !== '4/4') errors.push('reporter mission count ' + mc + ' (expected 4/4): ' + await S.$eval('#missionList', e => e.innerText));
+      await S.click('#paceBtn');
+      await S.waitForTimeout(400);
+      if (!/Phase 1/.test(await S.$eval('#pacePhase', e => e.innerText))) errors.push('pace timer phase 1 not shown');
+      await S.screenshot({ path: OUT + '/s3-write.png', fullPage: true });
+      await S.click('.die[data-w]');
+      await S.waitForSelector('.sheet');
+      if (!await S.$('.sheet ul.np li')) errors.push('news phrases missing from help sheet');
+      await S.screenshot({ path: OUT + '/s3b-help.png' });
+      await S.click('.sheet button');
+      if (await S.$eval('#copyBtn', b => b.classList.contains('hidden'))) errors.push('copy button hidden while drafting');
+      await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE });
+      await S.click('#copyBtn');
+      await S.waitForSelector('#toast.show');
+      if (!/Copied/.test(await S.$eval('#toast', e => e.textContent))) errors.push('copy toast wrong');
+      const clip = await S.evaluate(() => navigator.clipboard.readText()).catch(() => '');
+      if (clip && !/BREAKING \(Round 1/.test(clip)) errors.push('copied text wrong: ' + clip.slice(0, 60));
+      for (const w of [360, 390, 420]) {
+        await S.setViewportSize({ width: w, height: 844 });
+        if (await S.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)) errors.push('write screen scrolls sideways at ' + w + 'px');
+      }
+      await S.setViewportSize({ width: 390, height: 844 });
+      await S.fill('#post', good);
+    }
     if (await S.$eval('#file', b => b.disabled)) { errors.push('file locked for a good post: ' + good + ' / ' + await S.$eval('#must', u => u.innerText)); break; }
     await S.click('#file');
     await S.waitForSelector('#send', { timeout: 15000 });

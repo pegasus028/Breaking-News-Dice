@@ -5,24 +5,40 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Breaking News Dice</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/app.css?v=2026-11-02g">
+<link rel="stylesheet" href="css/app.css?v=2026-11-02h">
 </head>
 <body>
 <div class="st">
   <header class="st-top">
     <div class="brand">Breaking<br>News Dice</div>
     <div id="topDesk" style="display:flex;align-items:center;gap:10px;margin-left:auto"></div>
+    <button type="button" id="copyBtn" class="btn copybtn hidden" aria-label="Copy my report">📋 Copy</button>
   </header>
-  <p id="demoNote" class="hidden small muted" style="margin:8px 0 0">Demo mode: this game lives only in this browser.</p>
-  <main id="app" aria-live="polite"></main>
+  <p id="saveNote" class="savenote small hidden" role="status"></p>
+  <main id="app" aria-live="polite">
+    <div class="card onboard">
+      <span class="tag">BREAKING</span>
+      <h1 style="font-size:28px;margin:8px 0 4px">Newsroom briefing</h1>
+      <p class="lead"><b>Your mission:</b> turn two random flood words into a professional breaking news post, written in formal news English.</p>
+      <ol class="steps">
+        <li><b>Roll the dice</b> to get two Unit 5 flood words.</li>
+        <li><b>Connect the clues:</b> who, where, what happened? Write your post with both words and a passive.</li>
+        <li><b>File and fact-check:</b> file your post, check a classmate’s, then roll again.</li>
+      </ol>
+      <p class="small muted" id="bootMsg">Opening the newsroom…</p>
+    </div>
+    <noscript><div class="err">This game needs JavaScript. Turn it on in your browser settings (or open the link in Safari or Chrome), then reload the page.</div></noscript>
+  </main>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </div>
-<script src="js/config.js?v=2026-11-02g"></script>
-<script src="js/words.js?v=2026-11-02g"></script>
-<script src="js/check.js?v=2026-11-02g"></script>
-<script src="js/mock-gas.js?v=2026-11-02g"></script>
-<script src="js/demo-settings.js?v=2026-11-02g"></script>
-<script src="js/server.js?v=2026-11-02g"></script>
-<script src="js/ui.js?v=2026-11-02g"></script>
-<script src="js/student.js?v=2026-11-02g"></script>
+<script src="js/config.js?v=2026-11-02h"></script>
+<script src="js/words.js?v=2026-11-02h"></script>
+<script src="js/check.js?v=2026-11-02h"></script>
+<script src="js/mock-gas.js?v=2026-11-02h"></script>
+<script src="js/demo-settings.js?v=2026-11-02h"></script>
+<script src="js/server.js?v=2026-11-02h"></script>
+<script src="js/ui.js?v=2026-11-02h"></script>
+<script src="js/newsroom.js?v=2026-11-02h"></script>
+<script src="js/student.js?v=2026-11-02h"></script>
 </body>
 </html>

@@ -60,6 +60,7 @@
     renderTop();
     var key = screenKey();
     if (key !== screen || force) {
+      if (key !== screen) stopPace();
       screen = key;
       var fn = { pick: pickScreen, loading: loadingScreen, nosession: waitScreen, rejoin: rejoinScreen, over: overScreen,
         roll: rollScreen, write: writeScreen, check: checkScreen, done: doneScreen, final: finalScreen }[key.split('-')[0]];
@@ -81,6 +82,7 @@
   }
 
   function renderTop() {
+    copyBtn.classList.toggle('hidden', !reportText());
     if (!st || !st.joined || !st.me || !st.session) { topDesk.innerHTML = ''; return; }
     var finished = st.stage === 'done' || st.session.phase === 'final';
     topDesk.innerHTML = '<div class="desk"><b>' + bndEsc(st.me.label) + '</b>' +
@@ -94,7 +96,8 @@
 
   function howTo() {
     var needPassive = !(st && st.session && st.session.requirePassive === false);
-    return '<div class="card soft"><h3>How it works</h3><ol class="steps">' +
+    return '<div class="card soft"><h3>How it works</h3>' +
+      '<p style="margin:6px 0"><b>Your mission:</b> turn two random flood words into a professional breaking news post, written in formal news English.</p><ol class="steps">' +
       '<li><b>Roll</b> the dice to get two flood words.</li>' +
       '<li><b>Write</b> a breaking news post: both words, at least ' + BND_RULES.minWords + ' words (aim for ' + BND_RULES.minWords + '–' + BND_RULES.maxWords + ')' +
       (needPassive ? ', at least one passive (<i>were evacuated</i>)' : '') + '. You can file only when every rule is met.</li>' +
@@ -183,19 +186,121 @@
         var x = BND_WORD_BY_ID[w];
         var len = x.word.replace(/ .*/, '').length;
         return '<button class="die' + (len > 10 ? ' len3' : len > 8 ? ' len2' : '') + '" data-w="' + w + '" aria-label="' + bndEsc(x.word) + ': show meaning">' +
-          bndEsc(x.word) + '<span class="pos">' + bndEsc(x.pos) + ' · tap for help</span></button>';
+          bndEsc(x.word) + '<span class="pos">' + bndEsc(x.pos) + ' · 💡 tap: meaning + news phrases</span></button>';
       }).join('') + '</div>' +
+      paceHtml() +
       '<label class="post-head" for="post"><span class="tag">BREAKING</span><b>Your news post</b></label>' +
       '<textarea id="post" class="post-in" maxlength="2000" placeholder="e.g. Hundreds of families were evacuated from…" autocomplete="off" autocapitalize="sentences"></textarea>' +
+      phrasebankHtml() +
       '<p class="small" style="margin:10px 0 2px"><b>To file, you need</b></p><ul class="checks" id="must" aria-live="polite"></ul>' +
       '<button class="btn big primary" id="file">File my post</button>' +
-      '<p class="small" style="margin:14px 0 2px"><b>Bonus points</b></p><ul class="checks" id="bonus"></ul>';
+      '<p class="small" style="margin:14px 0 2px"><b>Bonus points</b></p><ul class="checks" id="bonus"></ul>' +
+      missionHtml();
     app.querySelector('.dice').onclick = function (e) { var b = e.target.closest('[data-w]'); if (b) helpSheet(b.getAttribute('data-w')); };
     var ta = document.getElementById('post');
     ta.value = draft.text;
     ta.oninput = function () { draft.text = ta.value; draft.dirty = true; updateChecks(); };
     document.getElementById('file').onclick = file;
+    bindPhrasebank(ta);
+    document.getElementById('paceBtn').onclick = function () { if (pace.timer) stopPace(); else startPace(); };
     updateChecks();
+  }
+
+  /* ---------- Anchor Desk phrasebank: tap a chip to put it into the post ---------- */
+  function phrasebankHtml() {
+    return '<details class="tools" id="phrasebank"><summary>🎙️ Anchor Desk Phrasebank <span class="muted">(B2/C1 boosters: tap to add)</span></summary>' +
+      BND_PHRASEBANK.map(function (g, gi) {
+        return '<div class="pb-group"><b>' + bndEsc(g.title) + '</b>' + (g.note ? '<span class="small muted"> · ' + bndEsc(g.note) + '</span>' : '') +
+          '<div class="pb-chips">' + g.chips.map(function (c, ci) {
+            return '<button type="button" class="pb-chip" data-g="' + gi + '" data-c="' + ci + '">' + bndEsc(c.label || c.text.replace(/\s+$/, '') + (/[.:]\s*$/.test(c.text) ? '' : ' …')) + '</button>';
+          }).join('') + '</div></div>';
+      }).join('') + '</details>';
+  }
+  function bindPhrasebank(ta) {
+    var pb = document.getElementById('phrasebank');
+    pb.onclick = function (e) {
+      var b = e.target.closest('.pb-chip'); if (!b) return;
+      var c = BND_PHRASEBANK[Number(b.getAttribute('data-g'))].chips[Number(b.getAttribute('data-c'))];
+      insertAtCursor(ta, c.text);
+    };
+  }
+  function insertAtCursor(ta, text) {
+    var v = ta.value, a = typeof ta.selectionStart === 'number' ? ta.selectionStart : v.length, z = typeof ta.selectionEnd === 'number' ? ta.selectionEnd : a;
+    if (document.activeElement !== ta && a === 0 && z === 0 && v.length) { a = z = v.length; }   // never focused: add at the end
+    var before = v.slice(0, a), after = v.slice(z);
+    if (before && !/\s$/.test(before)) text = ' ' + text;
+    ta.value = before + text + after;
+    var at = (before + text).length;
+    try { ta.focus(); ta.setSelectionRange(at, at); } catch (e) { /* old browsers */ }
+    draft.text = ta.value; draft.dirty = true; updateChecks();
+  }
+
+  /* ---------- Reporter mission: B2 news habits, detected while typing (no points) ---------- */
+  function missionHtml() {
+    return '<details class="tools mission" id="mission"><summary>🗞️ Reporter mission <span class="muted">(B2 challenge · no points)</span> <span class="mcount" id="mcount"></span></summary>' +
+      '<p class="small muted" style="margin:6px 0">Real reporters do these four things. Each one turns green when the game spots it in your post.</p>' +
+      '<ul class="checks" id="missionList"></ul></details>';
+  }
+  function updateMission(text) {
+    var list = document.getElementById('missionList'), cnt = document.getElementById('mcount');
+    if (!list) return;
+    var done = 0, h = '';
+    BND_MISSION.forEach(function (m) {
+      var hit = text ? m.test(text) : '';
+      if (hit) done++;
+      h += li(!!hit, '<b>' + bndEsc(m.label) + '</b><br><span class="small ' + (hit ? '' : 'muted') + '">' +
+        (hit ? 'Found: <i>' + bndEsc(hit) + '</i>' : 'e.g. <i>' + bndEsc(m.eg) + '</i>') + '</span>', '');
+    });
+    list.innerHTML = h;
+    cnt.textContent = done + '/' + BND_MISSION.length;
+    cnt.className = 'mcount' + (done === BND_MISSION.length ? ' all' : '');
+  }
+
+  /* ---------- optional 2-minute pace timer ---------- */
+  var pace = { timer: null, end: 0 };
+  function paceHtml() {
+    return '<div class="pace"><button type="button" class="btn" id="paceBtn" aria-pressed="false">⏱️ Start 2-min pace timer</button>' +
+      '<span class="small muted">Optional: no points, just a guide.</span>' +
+      '<div class="pace-box hidden" id="paceBox"><div class="pace-bar"><i id="paceFill"></i></div>' +
+      '<div class="pace-phase" id="pacePhase" aria-live="polite"></div></div></div>';
+  }
+  function startPace() {
+    pace.end = Date.now() + BND_PACE.seconds * 1000;
+    var btn = document.getElementById('paceBtn');
+    if (btn) { btn.textContent = '■ Stop timer'; btn.setAttribute('aria-pressed', 'true'); }
+    document.getElementById('paceBox').classList.remove('hidden');
+    pace.phase = -1;
+    tickPace();
+    pace.timer = setInterval(tickPace, 250);
+  }
+  function stopPace() {
+    if (pace.timer) clearInterval(pace.timer);
+    pace.timer = null;
+    var btn = document.getElementById('paceBtn');
+    if (btn) { btn.textContent = '⏱️ Start 2-min pace timer'; btn.setAttribute('aria-pressed', 'false'); }
+    var box = document.getElementById('paceBox');
+    if (box) box.classList.add('hidden');
+  }
+  function tickPace() {
+    var fill = document.getElementById('paceFill'), ph = document.getElementById('pacePhase');
+    if (!fill || !ph) { stopPace(); return; }
+    var left = Math.max(0, (pace.end - Date.now()) / 1000), secs = Math.ceil(left);
+    fill.style.width = (100 * (1 - left / BND_PACE.seconds)) + '%';
+    if (left <= 0) {
+      clearInterval(pace.timer); pace.timer = null;
+      ph.innerHTML = '<b>Time!</b> File your post as soon as the list above is complete.';
+      var btn = document.getElementById('paceBtn');
+      if (btn) { btn.textContent = '⏱️ Restart pace timer'; btn.setAttribute('aria-pressed', 'false'); }
+      return;
+    }
+    var idx = 0;
+    BND_PACE.phases.forEach(function (p, i) { if (secs <= p.from) idx = i; });
+    var p = BND_PACE.phases[idx];
+    ph.className = 'pace-phase' + (idx === 2 ? ' last' : '');
+    // rewrite the banner only when the phase or the clock changes, so screen readers hear each phase once
+    var clock = bndClock(secs);
+    if (idx !== pace.phase) { pace.phase = idx; ph.innerHTML = '<b>' + bndEsc(p.title) + '</b> <span class="pace-clock">' + clock + '</span><br>' + bndEsc(p.text); }
+    else { var c = ph.querySelector('.pace-clock'); if (c) c.textContent = clock; }
   }
 
   function li(state, txt, pts) {
@@ -223,6 +328,8 @@
       ' <span class="muted">(+1 each, max ' + R.maxExtraWords + ')</span>', a.extraPts ? '+' + a.extraPts : '+1');
     b += li(a.richPts > 0, R.richMin + ' long words of 9+ letters' + (a.longWords.length ? ': <i>' + a.longWords.map(bndEsc).join(', ') + '</i>' : ''), '+' + R.ptsRichVocab);
     bonus.innerHTML = b;
+    updateMission(draft.text);
+    copyBtn.classList.toggle('hidden', !reportText());
     var miss = !a.used[0] || !a.used[1] || !a.inRange || (needPassive && !a.passive) || a.traps.length > 0;
     var btn = document.getElementById('file');
     btn.disabled = busy || miss;
@@ -245,7 +352,9 @@
     bg.className = 'sheet-bg';
     bg.innerHTML = '<div class="sheet" role="dialog" aria-modal="true" aria-label="' + bndEsc(w.word) + '"><h2>' + bndEsc(w.word) +
       '</h2><span class="pos">' + bndEsc(w.pos) + '</span><dl><dt>Meaning</dt><dd>' + bndEsc(w.def) + '</dd><dt>Thai</dt><dd lang="th">' +
-      bndEsc(w.thai) + '</dd><dt>Use it like this</dt><dd>' + bndEsc(w.pattern) + '</dd></dl><button class="btn big">Close</button></div>';
+      bndEsc(w.thai) + '</dd><dt>Use it like this</dt><dd>' + bndEsc(w.pattern) + '</dd>' +
+      ((BND_NEWS_PHRASES[id] || []).length ? '<dt>💡 News phrases (B2/C1)</dt><dd><ul class="np">' + BND_NEWS_PHRASES[id].map(function (x) { return '<li>' + bndEsc(x) + '</li>'; }).join('') + '</ul></dd>' : '') +
+      '</dl><button class="btn big">Close</button></div>';
     bg.onclick = function (e) { if (e.target === bg || e.target.tagName === 'BUTTON') bg.remove(); };
     document.body.appendChild(bg);
     bg.querySelector('button').focus();
@@ -314,8 +423,49 @@
     }).join('') : '';
   }
 
+  /* ---------------- Copy my report ---------------- */
+  function reportText() {
+    if (!st || !st.joined || !st.me) return '';
+    var who = st.me.label || '';
+    if (st.stage === 'write' && st.words && draft.text.trim()) {
+      return 'BREAKING (Round ' + st.round + ': ' + st.words.map(bndWordName).join(' + ') + ')\n' + draft.text.trim() + '\n— ' + who;
+    }
+    var lp = st.lastPost;
+    if (lp && lp.text) return 'BREAKING (Round ' + lp.round + ': ' + (lp.words || []).map(bndWordName).join(' + ') + ')\n' + String(lp.text).trim() + '\n— ' + who;
+    return '';
+  }
+  function copyReport() {
+    var t = reportText();
+    if (!t) { toast('Nothing to copy yet: write your post first.'); return; }
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = t; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.top = '-1000px';
+      document.body.appendChild(ta); ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      ta.remove();
+      toast(ok ? 'Copied to clipboard!' : 'Could not copy. Select your post and copy it by hand.');
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(t).then(function () { toast('Copied to clipboard!'); }, fallback);
+    } else fallback();
+  }
+  var toastTimer = null;
+  function toast(msg) {
+    var el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.classList.remove('show'); }, 2200);
+  }
+
   /* ---------------- start ---------------- */
-  if (!BND_LIVE) document.getElementById('demoNote').classList.remove('hidden');
+  var copyBtn = document.getElementById('copyBtn');
+  document.getElementById('saveNote').classList.remove('hidden');
+  document.getElementById('saveNote').innerHTML = BND_LIVE
+    ? '<b>Live game:</b> your draft saves to the class game every few seconds. T.Chris sees a post only when you file it.'
+    : '<b>Practice mode:</b> your work is saved only in this browser, so T.Chris will not see it. Use <b>Copy</b> to keep your report before you close the page.';
+  copyBtn.onclick = copyReport;
   demoMarkReal();
   render(true);
   poll();

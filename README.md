@@ -7,6 +7,8 @@ post, next round. The teacher board on the projector shows a live leaderboard (w
 
 - `student.html` — student page (iPad/phone): tap your name, then follow the steps.
 - `teacher.html` — teacher board for the projector: leaderboard, Front Page picks, players & posts.
+  Writing tools (no points): Anchor Desk Phrasebank, Reporter mission self-check, optional 2-min pace timer,
+  news phrases on each dice word (`js/newsroom.js`), and **Copy** for the student's own copy of her post.
 - `demo.html` — board and one student side by side, in Demo mode.
 
 ## Running a game
