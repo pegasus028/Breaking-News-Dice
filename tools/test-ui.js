@@ -126,8 +126,25 @@ require('fs').mkdirSync(OUT, { recursive: true });
   if (fp) { await fp.click(); await T.waitForSelector('.cand.front', { timeout: 10000 }); }
   await T.waitForTimeout(1500);
   await T.screenshot({ path: OUT + '/t3-front.png' });
-  await T.click('button[data-a="finish"]');
-  await T.click('button[data-a="finish"]');
+  // Arena view: top-3 cards, chasing pack, snapshot; End game from the arena shows the podium
+  await T.click('button[data-a="arena"]');
+  await T.waitForSelector('#arena:not(.hidden) .pcard.p1', { timeout: 10000 });
+  await T.waitForTimeout(1500);
+  const arena = await T.evaluate(() => ({ cards: document.querySelectorAll('#arStrip .pcard.p1, #arStrip .pcard.p2, #arStrip .pcard.p3').length,
+    bars: document.querySelectorAll('#arBars .ar-row').length, feed: document.querySelectorAll('#arFeed .row').length,
+    players: Number(document.getElementById('kPlayers').textContent) }));
+  if (arena.cards !== 3 || arena.bars < 3 || arena.feed !== arena.players) errors.push('arena view incomplete: ' + JSON.stringify(arena));
+  await T.screenshot({ path: OUT + '/t3b-arena.png' });
+  await T.click('#arCtrl button[data-ar="end"]');
+  if (!/Click again/.test(await T.$eval('#arCtrl button[data-ar="end"]', b => b.textContent))) errors.push('arena End game is not two-click');
+  await T.click('#arCtrl button[data-ar="end"]');
+  await T.waitForSelector('#arPodium.show', { timeout: 15000 });
+  await T.waitForTimeout(1800);
+  if ((await T.$$('#arPlinks .block')).length !== 3) errors.push('podium does not show three blocks');
+  await T.screenshot({ path: OUT + '/t4-podium.png' });
+  await T.keyboard.press('Escape');
+  if (await T.$('#arPodium.show')) errors.push('Esc does not close the podium');
+  await T.click('#arCtrl button[data-ar="exit"]');
   await T.waitForSelector('text=Game over', { timeout: 15000 });
   await T.waitForTimeout(1500);
   await T.screenshot({ path: OUT + '/t4-final.png' });

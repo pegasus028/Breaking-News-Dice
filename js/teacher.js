@@ -68,8 +68,9 @@
       '<span class="ph">' + (s.phase === 'final' ? 'Final scores' : c ? c.players + ' playing · ' + c.filed + ' posts filed' : '') + '</span>' : 'No game yet';
     $('timer').textContent = '';
     var b = [];
-    if (s && s.phase === 'open') b.push(['finish', 'Finish game', 'alert']);
-    if (s && s.phase === 'final') b.push(['export', 'Download results', 'primary'], ['new', 'New game', '']);
+    if (s && s.phase === 'open') b.push(['finish', 'End game', 'alert']);
+    if (s && s.phase === 'final') b.push(['podium', '🏆 Podium', 'primary'], ['export', 'Download results', 'primary'], ['new', 'New game', '']);
+    b.push(['arena', '🏆 Arena view', '']);
     b.push(['drawer', 'Players & posts', ''], ['clean', document.body.classList.contains('clean') ? 'Show controls' : 'Hide controls', '']);
     var sig = JSON.stringify(b);
     if (sig === ctrlSig) return;
@@ -87,6 +88,8 @@
     if (a === 'clean') { document.body.classList.toggle('clean'); ctrlSig = ''; renderTop(); return; }
     if (a === 'new') { if (armed(b)) { setupMode = true; stageSig = ''; ctrlSig = ''; render(); } return; }
     if (a === 'export') { exportCsv(); return; }
+    if (a === 'arena') { bndArena.toggle(true); return; }
+    if (a === 'podium') { bndArena.showPodium(); return; }
     if (a === 'finish') { if (armed(b)) call({ action: 'finish' }).then(function () { ctrlSig = ''; renderTop(); }); }
   };
 
@@ -95,6 +98,7 @@
     renderTop();
     renderStage();
     if (drawerOpen) renderDrawer();
+    bndArena.update(setupMode ? null : t);
   }
 
   function studentUrl() {
@@ -309,6 +313,8 @@
   });
 
   /* ---------------- start ---------------- */
+  bndArena.init({ call: call, armed: armed, exportCsv: exportCsv, studentUrl: studentUrl,
+    onToggle: function () { ctrlSig = ''; renderTop(); } });
   if (BND_LIVE && !pin) showGate(false); else poll();
   setInterval(function () { if (!$('gate').classList.contains('hidden')) return; poll(); }, POLL_MS);
   setInterval(function () { if ($('lb') && t && t.players) renderBoard(); }, 1000);

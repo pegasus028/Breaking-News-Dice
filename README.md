@@ -22,7 +22,8 @@ post, next round. The teacher board on the projector shows a live leaderboard (w
    - **Fact-check** one classmate's post (least-checked first; a practice post if nobody else has filed),
      then the next round starts straight away. More rounds = more points.
 4. The board shows the leaderboard and the best fact-checked posts: tap **Front Page** (+5) any time.
-5. **Finish game** (click twice) ends play, gives unchecked posts the benefit of the doubt and shows the winner.
+5. **End game** (click twice) ends play, gives unchecked posts the benefit of the doubt and shows the podium.
+   **🏆 Arena view** is the dark Arena-style board (top-3 cards with a crown, the chasing pack as bars, class snapshot, full standings) with its own **End game & show podium**; the podium has rising blocks, confetti and a crowd cheer (Mute, Close or Esc).
    **Download results** saves every post and each student's totals as CSV; **New game** archives this game.
 
 ## Scoring

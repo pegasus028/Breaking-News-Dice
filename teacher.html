@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Newsroom Board</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/app.css?v=2026-11-02i">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Fraunces:opsz,wght@9..144,600;9..144,900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css?v=2026-11-02j">
 </head>
 <body>
 <div class="tc">
@@ -18,20 +18,60 @@
   <div id="flash" class="err hidden" role="alert" style="margin:10px 24px 0"></div>
   <main class="tc-stage" id="stage"></main>
 </div>
+<section class="arena hidden" id="arena" aria-label="Arena leaderboard">
+  <header class="ar-top">
+    <div class="ar-title">
+      <div class="kicker">Satriwithaya · Live</div>
+      <h1>Breaking News <em>Dice</em></h1>
+      <div class="sub" id="arHint"></div>
+    </div>
+    <div class="ar-count">
+      <div class="lab">Posts filed</div>
+      <div class="big" id="arBig">0</div>
+      <div class="state" id="arState">No game yet</div>
+    </div>
+  </header>
+  <div class="ar-strip" id="arStrip"></div>
+  <div class="ar-body">
+    <div class="ar-chartcol">
+      <div class="ch" id="arChTitle">The chasing pack</div>
+      <div class="ar-scroll"><div class="ar-bars" id="arBars"></div><div class="ar-empty hidden" id="arEmpty"></div></div>
+    </div>
+    <div class="ar-side">
+      <div class="ar-panel"><h3>Class snapshot</h3>
+        <div class="kv"><span>Students playing</span><b id="kPlayers">0</b></div>
+        <div class="kv"><span>Posts filed</span><b id="kPosts">0</b></div>
+        <div class="kv"><span>Fact-checks</span><b id="kChecks">0</b></div>
+        <div class="kv"><span>Top score</span><b id="kTop">0</b></div>
+      </div>
+      <div class="ar-panel ar-feed"><h3>Full standings</h3><div class="feedlist" id="arFeed"></div></div>
+    </div>
+  </div>
+  <div class="ar-ctrl" id="arCtrl"></div>
+</section>
+<canvas id="arConfetti" class="ar-confetti"></canvas>
+<div class="ar-podium" id="arPodium" role="dialog" aria-modal="true" aria-label="Final standings">
+  <h2>Final Standings</h2>
+  <div class="psub">Breaking News Dice · Unit 5</div>
+  <div class="plinks" id="arPlinks"></div>
+  <div class="rest" id="arRest"></div>
+  <div class="podbtns"><button type="button" id="arMute">🔊 Mute crowd</button><button type="button" id="arClose">Close</button></div>
+</div>
 <aside class="drawer hidden" id="drawer" aria-label="Desks and posts"></aside>
 <div class="gate hidden" id="gate">
   <form id="gateForm"><h1>Teacher PIN</h1><input id="pin" type="password" inputmode="numeric" autocomplete="off" aria-label="Teacher PIN">
     <button class="btn big primary">Open the board</button><p id="pinMsg" class="small" style="color:var(--alert)"></p></form>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="js/config.js?v=2026-11-02i"></script>
-<script src="js/words.js?v=2026-11-02i"></script>
-<script src="js/check.js?v=2026-11-02i"></script>
-<script src="js/mock-gas.js?v=2026-11-02i"></script>
-<script src="js/demo-settings.js?v=2026-11-02i"></script>
-<script src="js/server.js?v=2026-11-02i"></script>
-<script src="js/ui.js?v=2026-11-02i"></script>
-<script src="js/bots.js?v=2026-11-02i"></script>
-<script src="js/teacher.js?v=2026-11-02i"></script>
+<script src="js/config.js?v=2026-11-02j"></script>
+<script src="js/words.js?v=2026-11-02j"></script>
+<script src="js/check.js?v=2026-11-02j"></script>
+<script src="js/mock-gas.js?v=2026-11-02j"></script>
+<script src="js/demo-settings.js?v=2026-11-02j"></script>
+<script src="js/server.js?v=2026-11-02j"></script>
+<script src="js/ui.js?v=2026-11-02j"></script>
+<script src="js/bots.js?v=2026-11-02j"></script>
+<script src="js/arena.js?v=2026-11-02j"></script>
+<script src="js/teacher.js?v=2026-11-02j"></script>
 </body>
 </html>

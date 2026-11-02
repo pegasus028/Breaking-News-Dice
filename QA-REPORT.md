@@ -1,5 +1,13 @@
 # QA report
 
+## Teacher console: Arena view, End game, podium; guest seats — 2 November 2026 (Claude Opus 5.5)
+
+- **Guest seats:** `server.js` adds Guest 1–3 (ids g1–g3) after the class list; skipped if Roster.gs already uses those ids. Code.gs rebuilt: **needs Deploy → Manage deployments → New version** before the guests appear in the live game.
+- **🏆 Arena view** (new `js/arena.js`, modelled on the Nominalization Arena leaderboard): dark stage, pinned top-3 cards (gold card with crown, float and shine; silver; bronze; count-up and +delta), the chasing pack as bars (places 4+, scrolls), class snapshot, full standings, a lead-change chime.
+- **End game:** "End game & show podium" in the arena (two clicks); the classic board's "Finish game" is now "End game". Ending from either board opens the podium; a **🏆 Podium** button reopens it.
+- **Podium:** rising gold/silver/bronze blocks, confetti, synthesised crowd cheer (Mute, Close, Esc); students who tie share a step; places after the podium listed below. Confetti and animations are off under reduced motion.
+- Front end only for this part (Code.gs unchanged by it). Tests: ES5 parse, sim.js ALL OK, test-ui.js NO PAGE ERRORS (new checks: guests listed last, arena cards/bars/standings, two-click End game, podium with three blocks, Esc closes).
+
 ## Student console: CEFR B2 review items — 2 November 2026 (Claude Opus 5.5)
 
 Source: the review "Breaking News Dice - CEFR B2 Audit & Update Specification" (Google Doc, Nov 2026).
