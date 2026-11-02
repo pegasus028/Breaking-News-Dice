@@ -8,9 +8,27 @@ var BND_RULES = {
   ptsLength: 1,      // post is 15–25 words
   ptsPassive: 2,     // at least one passive (be/get + past participle)
   ptsPeerWord: 3,    // fact-checker agrees the word is used with the right meaning
-  ptsFront: 5,       // teacher's Front Page pick for the round
-  ptsCheck: 1        // each fact-check a student completes earns her desk 1
+  ptsFront: 5,       // teacher's Front Page pick
+  ptsCheck: 1,       // each fact-check a student completes earns her 1
+  ptsStructure: 1,   // bonus per kind of complex structure (max 3)
+  maxStructure: 3,
+  ptsExtraWord: 1,   // bonus per extra Unit 5 word beyond the two dice words (max 2)
+  maxExtraWords: 2,
+  ptsRichVocab: 1,   // bonus for 3+ long words (9+ letters) besides the dice words
+  richMin: 3
 };
+
+/* Complex sentence structure: one bonus point per kind found. */
+var BND_STRUCTURES = [
+  { id: 'sub', label: 'subordinate clause (after, because, although, while \u2026)',
+    re: /\b(after|before|while|although|though|because|since|unless|until|whereas|once|as soon as|even though|so that|even if)\b/i },
+  { id: 'rel', label: 'relative clause (which, who, where, whose \u2026)',
+    re: /\b(which|who|whom|whose|where)\b/i },
+  { id: 'adv', label: 'advanced passive (has been / is being / must be / is thought to \u2026)',
+    re: /\b((has|have|had)\s+been|(is|are|was|were)\s+being|(must|should|could|would|might|may|can|will)\s+(have\s+)?be(en)?|it\s+(is|was)\s+(said|thought|believed|reported|expected|feared|estimated)\s+that|(is|are|was|were)\s+(said|thought|believed|reported|expected|feared|estimated)\s+to\s+(be|have))\s+[a-z]+/i },
+  { id: 'part', label: 'participle phrase (families displaced by \u2026 / Having \u2026)',
+    re: /(\b(?!(?:am|is|are|was|were|be|been|being|has|have|had|get|got|gets)\b)[a-z]+\s+[a-z]+ed\s+by\b)|(^|[.!?;,]\s*)having\s+[a-z]+/i }
+];
 
 var BND_IRREGULAR_PP = ('arisen awoken beaten become begun bent bet bitten blown broken brought built burnt burned ' +
   'bought caught chosen come cost cut dealt done drawn driven drunk eaten fallen fed felt fought found flown ' +
@@ -94,8 +112,28 @@ function bndAnalyse(text, ids) {
   var inRange = count >= BND_RULES.minWords && count <= BND_RULES.maxWords;
   var p = bndPassives(text);
   var passive = p.passives.length > 0;
-  var pts = used.filter(Boolean).length * BND_RULES.ptsWord +
-    (inRange ? BND_RULES.ptsLength : 0) + (passive ? BND_RULES.ptsPassive : 0);
+  var R = BND_RULES;
+  // bonus: complex structure
+  var structures = BND_STRUCTURES.filter(function (st) { return st.re.test(text); }).map(function (st) { return st.id; });
+  var structPts = Math.min(R.maxStructure, structures.length * R.ptsStructure);
+  // bonus: vocabulary (extra Unit 5 words; several long words)
+  var extra = BND_WORDS.map(function (w) { return w.id; }).filter(function (id) {
+    return (ids || []).indexOf(id) < 0 && bndWordRegex(id).test(text);
+  });
+  // long words that are not Unit 5 words (those already score on their own)
+  var unitSpans = bndFindSpans(text, BND_WORDS.map(function (w) { return w.id; }));
+  var longWords = [];
+  var re = /[A-Za-z][A-Za-z'-]{8,}/g, m;
+  while ((m = re.exec(text))) {
+    var st0 = m.index, lw = m[0].toLowerCase();
+    var isUnit = unitSpans.some(function (sp) { return st0 >= sp.start && st0 < sp.end; });
+    if (!isUnit && longWords.indexOf(lw) < 0) longWords.push(lw);
+  }
+  var extraPts = Math.min(R.maxExtraWords, extra.length * R.ptsExtraWord);
+  var richPts = longWords.length >= R.richMin ? R.ptsRichVocab : 0;
+  var pts = used.filter(Boolean).length * R.ptsWord +
+    (inRange ? R.ptsLength : 0) + (passive ? R.ptsPassive : 0) + structPts + extraPts + richPts;
   return { used: used, count: count, inRange: inRange, passive: passive,
-    passives: p.passives, traps: p.traps, autoPts: pts };
+    passives: p.passives, traps: p.traps, structures: structures, structPts: structPts,
+    extraWords: extra, extraPts: extraPts, longWords: longWords, richPts: richPts, autoPts: pts };
 }

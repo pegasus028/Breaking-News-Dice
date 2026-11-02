@@ -229,3 +229,23 @@ body.offline .tc-top { border-bottom-color: var(--alert); }
 .teamcard i { font-style: normal; font-size: 15px; color: var(--muted); }
 .teamcard span { font-weight: 700; font-size: 20px; line-height: 1.2; }
 .gauge .lab .num { font-family: var(--display); font-weight: 800; font-size: 15px; color: var(--ink); }
+
+/* individual leaderboard: one row per student, the water level is her score */
+.lb { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 28px; row-gap: 4px; flex: 1 1 0; min-height: 200px; }
+.lbrow { display: grid; grid-template-columns: 44px minmax(90px, 160px) minmax(0, 1fr) 70px 48px; align-items: center; gap: 10px;
+  font-size: 19px; min-height: 0; border-bottom: 1px solid #d8d8d8; }
+.lbrow .rk { font-family: var(--display); font-weight: 800; color: var(--muted); font-variant-numeric: tabular-nums; }
+.lbrow .nm { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lbrow .track { position: relative; height: 70%; min-height: 12px; max-height: 26px; border-left: 3px solid var(--ink);
+  background: repeating-linear-gradient(to right, transparent 0 calc(10% - 1px), #c8c8c8 calc(10% - 1px) 10%); }
+.lbrow .water { position: absolute; left: 0; top: 0; bottom: 0; background: var(--flood); border-radius: 0 4px 4px 0; transition: width 1.2s cubic-bezier(.2,.8,.2,1); }
+.lbrow .tot { font-family: var(--display); font-weight: 800; font-size: 22px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lbrow .tot small { color: var(--ok); font-family: var(--body); font-size: 14px; }
+.lbrow .meta { font-size: 14px; color: var(--muted); font-weight: 700; }
+.lbrow.leader .nm, .lbrow.leader .rk { color: var(--alert); }
+.cands.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.cands.two .post-show { font-size: 19px; }
+label.tick { display: flex; gap: 10px; align-items: center; font-weight: 700; }
+label.tick input { width: 24px; height: 24px; }
+@media (prefers-reduced-motion: reduce) { .lbrow .water { transition: none; } }
+@media (max-width: 900px) { .lb { grid-template-columns: minmax(0, 1fr); } }
