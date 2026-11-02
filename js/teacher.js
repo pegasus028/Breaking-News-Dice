@@ -35,7 +35,9 @@
       var real = JSON.parse(bndStore('bnd-demo-real') || '[]');
       bndBotsTick(real);
     }
-    call({ action: 'tstate' }).then(function () { document.body.classList.remove('offline'); });
+    if (poll.busy) return;
+    poll.busy = true;
+    call({ action: 'tstate' }).then(function () { poll.busy = false; document.body.classList.remove('offline'); }, function () { poll.busy = false; });
   }
 
   function flash(msg) {

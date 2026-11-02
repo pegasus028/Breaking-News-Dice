@@ -16,7 +16,7 @@ require('fs').mkdirSync(OUT, { recursive: true });
   };
   const T = await ctx.newPage(); watch(T, 'teacher');
   await T.setViewportSize({ width: 1280, height: 720 });
-  await T.goto(BASE + 'teacher.html');
+  await T.goto(BASE + 'teacher.html?demo');
   await T.evaluate(() => { localStorage.clear(); });
   await T.reload();
   await T.click('#start');
@@ -24,7 +24,7 @@ require('fs').mkdirSync(OUT, { recursive: true });
 
   const S = await ctx.newPage(); watch(S, 'student');
   await S.setViewportSize({ width: 390, height: 844 });
-  await S.goto(BASE + 'student.html');
+  await S.goto(BASE + 'student.html?demo');
   await S.waitForSelector('.names button');
   await S.screenshot({ path: OUT + '/s1-pick.png' });
   await S.click('.names button:has-text("Hana")');

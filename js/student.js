@@ -3,7 +3,8 @@
   var app = document.getElementById('app');
   var topDesk = document.getElementById('topDesk');
   var POLL_MS = BND_LIVE ? 3000 : 1200;
-  var sid = bndStore('bnd-sid');
+  var SID_KEY = BND_LIVE ? 'bnd-sid' : 'bnd-demo-sid';
+  var sid = bndStore(SID_KEY);
   var st = null;              // last state from the server
   var screen = '';            // current screen key; re-render only when it changes
   var draft = { text: '', dirty: false, sentAt: 0, round: 0 };
@@ -26,7 +27,9 @@
     if (draft.dirty && (writing || (s && s.phase === 'verify')) && (Date.now() - draft.sentAt > 6000 || !writing)) {
       req.draft = draft.text; draft.sentAt = Date.now(); draft.dirty = false;
     }
-    bndApi(req).then(apply).catch(function () { setConn(false); });
+    if (poll.busy) return;
+    poll.busy = true;
+    bndApi(req).then(function (v) { poll.busy = false; apply(v); }).catch(function () { poll.busy = false; setConn(false); });
   }
   function setConn(okConn) { document.body.classList.toggle('offline', !okConn); }
 
@@ -125,7 +128,7 @@
   function join(chosen) {
     bndApi({ action: 'join', sid: chosen, device: bndDevice() }).then(function (v) {
       var notStarted = !v.ok && /not started/.test(v.error || '');
-      if (v.ok || notStarted) { sid = chosen; bndStore('bnd-sid', sid); demoMarkReal(); }
+      if (v.ok || notStarted) { sid = chosen; bndStore(SID_KEY, sid); demoMarkReal(); }
       if (!v.ok) { if (!notStarted) lastError = v.error; else poll(); render(true); return; }
       apply(v);
     }).catch(function () { lastError = 'Cannot reach the game. Check the Wi-Fi and try again.'; render(true); });
@@ -137,7 +140,7 @@
   }
   function bindNotMe() {
     var b = document.getElementById('notme');
-    if (b) b.onclick = function () { sid = null; bndStore('bnd-sid', null); st = null; screen = ''; render(true); };
+    if (b) b.onclick = function () { sid = null; bndStore(SID_KEY, null); st = null; screen = ''; render(true); };
   }
 
   function howTo() {
