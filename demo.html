@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Breaking News Dice demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css?v=2026-11-02a">
+<style>
+  body { background: #fff; }
+  .bar { display: flex; gap: 12px; align-items: center; padding: 10px 16px; border-bottom: 3px solid #000; flex-wrap: wrap; }
+  .bar h1 { font-size: 22px; }
+  .split { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 12px; padding: 12px; height: calc(100vh - 64px); }
+  .split figure { margin: 0; display: grid; grid-template-rows: auto 1fr; gap: 6px; min-height: 0; }
+  .split figcaption { font-weight: 700; }
+  .split iframe { width: 100%; height: 100%; border: 3px solid #000; border-radius: 10px; background: #fff; }
+  .split .phone iframe { border-radius: 26px; }
+  @media (max-width: 900px) { .split { grid-template-columns: 1fr; height: auto; } .split iframe { height: 720px; } }
+</style>
+</head>
+<body>
+<div class="bar"><h1>Demo: board + one student</h1>
+  <span class="small muted">Start a game on the board, switch on <b>Simulate class</b> in Desks &amp; posts, then play as a student on the right.</span></div>
+<div class="split">
+  <figure><figcaption>Teacher board (projector)</figcaption><iframe src="teacher.html" title="Teacher board"></iframe></figure>
+  <figure class="phone"><figcaption>Student iPad</figcaption><iframe src="student.html" title="Student console"></iframe></figure>
+</div>
+</body>
+</html>

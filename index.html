@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Breaking News Dice</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css?v=2026-11-02a">
+<style>
+  .home { max-width: 760px; margin: 0 auto; padding: 32px 16px 48px; }
+  .home h1 { font-size: clamp(40px, 9vw, 72px); line-height: .95; }
+  .home .doors { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 26px 0; }
+  .home .doors a { display: block; border: 3px solid var(--ink); border-radius: 14px; padding: 18px; color: var(--ink); text-decoration: none; }
+  .home .doors a:hover { background: var(--panel); }
+  .home .doors b { font-family: var(--display); font-size: 26px; display: block; }
+</style>
+</head>
+<body>
+<div class="home">
+  <span class="tag">BREAKING</span>
+  <h1>Breaking News Dice</h1>
+  <p class="lead">English 4 · Unit 5 <i>When the Water Came</i>. Pairs roll two flood words, write a breaking news post, then fact-check another desk.</p>
+  <div class="doors">
+    <a href="student.html"><b>Student</b>Tap your name and follow the steps on your iPad.</a>
+    <a href="teacher.html"><b>Teacher board</b>Run the game and show live desk scores on the projector.</a>
+    <a href="demo.html" id="demoDoor" class="hidden"><b>Try the demo</b>Board and a student phone side by side, with a pretend class.</a>
+  </div>
+</div>
+<script src="js/config.js?v=2026-11-02a"></script>
+<script>if (!(window.BND_API_URL)) document.getElementById('demoDoor').classList.remove('hidden');</script>
+</body>
+</html>
