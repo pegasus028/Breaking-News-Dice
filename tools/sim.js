@@ -97,5 +97,22 @@ if (!PIN) {
   t = H({ action: 'tstate', pin: PIN });
   ok(t.players.length === roster.length && t.posts.length > 20, 'bots play: ' + t.posts.length + ' posts');
 }
+// cache and Sheet agree row for row after the whole game
+const sheetRows = ctx.SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Store').getDataRange().getValues().slice(1).filter(r => r[0]);
+const cached = ctx.bndCacheGet_();
+ok(cached && cached.rows.length === sheetRows.length && cached.rows.every((r, i) => r[0] === String(sheetRows[i][0]) && r[1] === String(sheetRows[i][1])), 'cache matches the Sheet row for row');
+// a saturated lock answers busy (no exception, no write) and the next call still works
+ctx.BND_MOCK_BUSY = 1;
+const bz = H({ action: 'join', sid: roster[1].sid, device: 'x' });
+ok(!bz.ok && bz.busy, 'tryLock failure → busy reply');
+ctx.BND_MOCK_BUSY = 0.3;
+let busyCount = 0;
+H({ action: 'newSession', pin: PIN }); while (!H({ action: 'tstate', pin: PIN }).session) H({ action: 'newSession', pin: PIN });
+for (let k = 0; k < 60; k++) roster.slice(0, 8).forEach(s => { const r = H({ action: 'join', sid: s.sid, device: 'd' + s.sid }); if (r.busy) busyCount++; });
+ctx.BND_MOCK_BUSY = 0;
+ok(busyCount > 0, 'busy replies seen under a flaky lock: ' + busyCount);
+const sheet2 = ctx.SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Store').getDataRange().getValues().slice(1).filter(r => r[0]);
+const cached2 = ctx.bndCacheGet_();
+ok(cached2 && cached2.rows.length === sheet2.length && new Set(sheet2.map(r => r[0])).size === sheet2.length, 'no duplicate or lost rows after busy replies');
 console.log(fails ? fails + ' FAILURES' : 'ALL OK');
 process.exit(fails ? 1 : 0);

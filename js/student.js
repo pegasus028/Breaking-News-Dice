@@ -4,7 +4,13 @@
 (function () {
   var app = document.getElementById('app');
   var topDesk = document.getElementById('topDesk');
-  var POLL_MS = BND_LIVE ? 3000 : 1200;
+  /* Polling (2 Nov 2026): the server replies to every action with the full view, so a poll is only for
+     changes made by others (the game ending, a release, points from fact-checks). 23 students at 3 s with a draft
+     sent every 8 s overloaded Apps Script's single lock in class; now 10 s (± 2 s jitter) with a draft at most
+     every 30 s, no polls while the tab is hidden, and the gap doubles (to 60 s) while the server is unreachable. */
+  var POLL_MS = BND_LIVE ? 10000 : 1200;
+  var DRAFT_MS = BND_LIVE ? 30000 : 4000;
+  var pollDelay = POLL_MS, pollTimer = null;
   var SID_KEY = BND_LIVE ? 'bnd-sid' : 'bnd-demo-sid';
   var sid = bndStore(SID_KEY);
   var st = null;              // last state from the server
@@ -22,19 +28,40 @@
   }
 
   /* ---------------- polling ---------------- */
+  function schedule(ms) {
+    clearTimeout(pollTimer);
+    var jitter = BND_LIVE ? (Math.random() - 0.5) * 0.4 * ms : 0;
+    pollTimer = setTimeout(poll, Math.max(500, ms + jitter));
+  }
   function poll() {
-    if (!sid || poll.busy) return;
+    if (!sid) { schedule(pollDelay); return; }
+    if (poll.busy) return;
+    if (document.hidden && st) { schedule(pollDelay); return; }   // a hidden tab waits; visibilitychange polls at once
     var req = { action: 'state', sid: sid };
-    if (draft.dirty && st && st.stage === 'write' && Date.now() - draft.sentAt > 8000) {
+    if (draft.dirty && st && st.stage === 'write' && Date.now() - draft.sentAt > DRAFT_MS) {
       req.draft = draft.text; draft.sentAt = Date.now(); draft.dirty = false;
     }
     poll.busy = true;
     var sentAt = Date.now();
-    bndApi(req).then(function (v) { poll.busy = false; if (sentAt >= actionAt) apply(v); }).catch(function () { poll.busy = false; document.body.classList.add('offline'); });
+    bndApi(req).then(function (v) {
+      poll.busy = false;
+      if (v && v.busy) throw new Error('busy');   // the server is saturated: back off like a network failure, keep the screen
+      if (req.draft !== undefined && !(v && v.ok)) draft.dirty = true;
+      pollDelay = POLL_MS;
+      if (sentAt >= actionAt) apply(v);
+      schedule(pollDelay);
+    }).catch(function () {
+      poll.busy = false; document.body.classList.add('offline');
+      if (req.draft !== undefined) draft.dirty = true;          // send that draft again next time
+      pollDelay = Math.min(60000, pollDelay * 2);
+      schedule(pollDelay);
+    });
   }
 
   function apply(v) {
     document.body.classList.remove('offline');
+    if (v && v.ok) pollDelay = POLL_MS;
+    if (!poll.busy) schedule(pollDelay);
     if (!v.ok && !v.session) { lastError = v.error || 'Something went wrong.'; render(true); return; }
     st = v;
     // a new game started after she picked her name: join it automatically, once
@@ -123,7 +150,7 @@
     (actionAt = Date.now(), bndApi({ action: 'join', sid: chosen, device: bndDevice() })).then(function (v) {
       var notStarted = !v.ok && /not started/.test(v.error || '');
       if (v.ok || notStarted) { sid = chosen; bndStore(SID_KEY, sid); demoMarkReal(); }
-      if (!v.ok) { if (!notStarted) lastError = v.error; render(true); if (notStarted) poll(); return; }
+      if (!v.ok) { if (!notStarted) lastError = v.busy ? 'The game is busy. Tap your name again.' : v.error; render(true); if (notStarted) poll(); return; }
       apply(v);
     }).catch(function () { lastError = 'Cannot reach the game. Check the Wi-Fi and try again.'; render(true); });
   }
@@ -178,9 +205,17 @@
   }
 
   /* ---------- write ---------- */
+  /* The draft also lives in this browser (keyed by game, round and words), so a reload shows it at once and a
+     draft typed since the last 30-s sync is never lost; the server copy is for a student who changes device. */
+  function draftKey(key) { return 'bnd-draft:' + (st.session ? st.session.id : '') + ':' + key; }
+  function saveLocalDraft() { if (draft.key) bndStore(draftKey(draft.key), draft.text); }
   function writeScreen() {
     var words = st.words, key = st.round + ':' + words.join(',');
-    if (draft.key !== key) draft = { text: st.draft || '', dirty: false, sentAt: 0, key: key };
+    if (draft.key !== key) {
+      var local = bndStore(draftKey(key));
+      draft = { text: local !== null && local !== undefined ? local : (st.draft || ''), dirty: false, sentAt: 0, key: key };
+      if (local && local !== (st.draft || '') && local.length >= (st.draft || '').length) draft.dirty = true;   // the server copy is behind: sync it
+    }
     app.innerHTML = head('Round ' + st.round + ': write your post') +
       '<div class="dice" aria-label="Your dice words">' + words.map(function (w) {
         var x = BND_WORD_BY_ID[w];
@@ -199,7 +234,7 @@
     app.querySelector('.dice').onclick = function (e) { var b = e.target.closest('[data-w]'); if (b) helpSheet(b.getAttribute('data-w')); };
     var ta = document.getElementById('post');
     ta.value = draft.text;
-    ta.oninput = function () { draft.text = ta.value; draft.dirty = true; updateChecks(); };
+    ta.oninput = function () { draft.text = ta.value; draft.dirty = true; saveLocalDraft(); updateChecks(); };
     document.getElementById('file').onclick = file;
     bindPhrasebank(ta);
     document.getElementById('paceBtn').onclick = function () { if (pace.timer) stopPace(); else startPace(); };
@@ -232,7 +267,7 @@
     ta.value = before + text + after;
     var at = (before + text).length;
     try { ta.focus(); ta.setSelectionRange(at, at); } catch (e) { /* old browsers */ }
-    draft.text = ta.value; draft.dirty = true; updateChecks();
+    draft.text = ta.value; draft.dirty = true; saveLocalDraft(); updateChecks();
   }
 
   /* ---------- Reporter mission: B2 news habits, detected while typing (no points) ---------- */
@@ -340,8 +375,13 @@
     busy = true; updateChecks();
     (actionAt = Date.now(), bndApi({ action: 'save', sid: sid, text: draft.text, filed: true })).then(function (v) {
       busy = false;
-      if (!v.ok) { lastError = v.error; showError(); updateChecks(); return; }
+      if (!v.ok) {
+        lastError = v.error;
+        if (v.session && v.stage && v.stage !== 'write') { apply(v); return; }   // it was filed after all (a timed-out first try)
+        showError(); updateChecks(); return;
+      }
       draft.dirty = false;
+      if (draft.key) bndStore(draftKey(draft.key), null);
       apply(v);
     }).catch(function () { busy = false; lastError = 'Not filed: no connection. Try again.'; showError(); updateChecks(); });
   }
@@ -397,7 +437,7 @@
       busy = true; this.disabled = true;
       (actionAt = Date.now(), bndApi({ action: 'check', sid: sid, ok: verdict.ok, stars: verdict.stars })).then(function (v) {
         busy = false;
-        if (!v.ok) { lastError = v.error; render(true); return; }
+        if (!v.ok) { lastError = v.busy ? 'The game is busy. Tap Send again.' : v.error; if (v.session && !v.busy) { apply(v); render(true); } else { render(true); } return; }
         apply(v);
       }).catch(function () { busy = false; lastError = 'Not sent: no connection. Try again.'; render(true); });
     };
@@ -469,6 +509,5 @@
   demoMarkReal();
   render(true);
   poll();
-  setInterval(poll, POLL_MS);
-  document.addEventListener('visibilitychange', function () { if (!document.hidden) poll(); });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) { pollDelay = POLL_MS; poll(); } });
 })();

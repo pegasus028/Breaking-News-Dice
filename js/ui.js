@@ -3,12 +3,30 @@
 var BND_LIVE = !!(window.BND_API_URL && /^https:\/\//.test(window.BND_API_URL));
 var bndClockOffset = 0;
 
-function bndApi(req) {
+var BND_API_TIMEOUT = 25000;   // ms; a hung request must not block the next poll for ever
+function bndFetchJson(req) {
+  var ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
+  var opts = { method: 'POST', body: JSON.stringify(req), redirect: 'follow' };
+  if (ctrl) opts.signal = ctrl.signal;
+  var tm = null;
+  // text/plain body = no CORS preflight; Apps Script answers with JSON
+  var req1 = fetch(window.BND_API_URL, opts)
+    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+  // a timer that always settles the promise, even on browsers with no AbortController (old iPads)
+  var timer = new Promise(function (res, rej) { tm = setTimeout(function () { if (ctrl) ctrl.abort(); rej(new Error('timeout')); }, BND_API_TIMEOUT); });
+  return Promise.race([req1, timer])
+    .then(function (out) { clearTimeout(tm); return out; }, function (e) { clearTimeout(tm); throw e; });
+}
+function bndApi(req, tries) {
   var p;
   if (BND_LIVE) {
-    // text/plain body = no CORS preflight; Apps Script answers with JSON
-    p = fetch(window.BND_API_URL, { method: 'POST', body: JSON.stringify(req), redirect: 'follow' })
-      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+    p = bndFetchJson(req).then(function (out) {
+      // the server could not get its lock in time: one more try after a short pause, then give up
+      if (out && out.busy && req.action !== 'state' && req.action !== 'tstate' && (tries || 0) < 2) {
+        return new Promise(function (res) { setTimeout(res, 1500 + Math.random() * 1500); }).then(function () { return bndApi(req, (tries || 0) + 1); });
+      }
+      return out;
+    });
   } else {
     p = new Promise(function (res) {
       setTimeout(function () { res(JSON.parse(JSON.stringify(bndHandle(req)))); }, 40);

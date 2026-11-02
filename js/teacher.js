@@ -2,7 +2,7 @@
    Students play individually at their own speed; the board shows a live leaderboard,
    the best fact-checked posts (tap Front Page for +5) and the controls. */
 (function () {
-  var POLL_MS = BND_LIVE ? 2000 : 1000;
+  var POLL_MS = BND_LIVE ? 5000 : 1000;   // every teacher action already returns the board state
   var pin = '';
   try { pin = sessionStorage.getItem('bnd-pin') || ''; } catch (e) { /* storage blocked */ }
   var t = null;                 // last teacher state
@@ -27,6 +27,7 @@
     req.pin = pin;
     return bndApi(req).then(function (out) {
       if (!out.ok && out.error === 'pin') { showGate(true); return out; }
+      if (!out.ok && out.busy) { if (req.action !== 'tstate') flash('The game is busy. Try that again.'); return out; }
       if (!out.ok) { flash(out.error); return out; }
       if (out.session !== undefined) { t = out; render(); }
       return out;

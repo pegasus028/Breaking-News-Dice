@@ -10,82 +10,150 @@ var BND_DESK_NAMES = ['Chao Phraya Chronicle', 'Klong Courier', 'Monsoon Mail', 
   'Ayutthaya Advertiser'];
 var BND_TEAM_COUNT = 15;         // team numbers 1–15 on the student screen
 var BND_MAX_ROUNDS = 20;         // rounds are open-ended: faster students simply play more of them
-var BND_CACHE_KEY = 'bnd-store-v2';
+var BND_CACHE_KEY = 'bnd-store-v3';
+var BND_CACHE_TTL = 1800;       // seconds; every write refreshes the cache, so it is only a fallback expiry
+var BND_CACHE_RECHECK = 120000; // ms: under the lock, re-read the sheet when the cached copy is older than this
 
-/* ---------- storage: one "Store" sheet of key | json | updated ---------- */
+/* ---------- storage: one "Store" sheet of key | json | updated ----------
+   Performance (2 Nov 2026): with 23 students the Sheet is the bottleneck, so the script cache holds a
+   versioned copy of the whole store. Every write happens under the script lock and refreshes the cache,
+   so the cache is authoritative while it exists: reads (student polls, the teacher board) never touch
+   the Sheet, and a write touches exactly one row. A stale-looking cache (older than BND_CACHE_RECHECK)
+   is re-read from the Sheet once, under the lock, as insurance against manual edits. */
 /* SHEET_ID (in Roster.gs) points a standalone script at its Sheet; a script bound to the Sheet needs none. */
 function bndSS_() {
   return (typeof SHEET_ID !== 'undefined' && SHEET_ID) ? SpreadsheetApp.openById(SHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
 }
+var BND_SHEET_ = null;
 function bndSheet_() {
+  if (BND_SHEET_) return BND_SHEET_;
   var ss = bndSS_();
   var sh = ss.getSheetByName('Store');
   if (!sh) {
     sh = ss.insertSheet('Store');
     sh.getRange(1, 1, 1, 3).setValues([['key', 'json', 'updated']]);
   }
+  BND_SHEET_ = sh;
   return sh;
 }
 
-function bndRead_(useCache) {
-  var raw = useCache ? bndCacheGet_() : null;
-  var rows;
-  if (raw) { rows = JSON.parse(raw); }
+function bndReadSheet_() {
+  var vals = bndSheet_().getDataRange().getValues();
+  var rows = [];
+  for (var i = 1; i < vals.length; i++) if (vals[i][0]) rows.push([String(vals[i][0]), String(vals[i][1])]);
+  rows.lastRow = vals.length;   // the sheet's real last row (header included), for appends
+  return rows;
+}
+
+/* useCache: read the cached copy when there is one. maxAge (ms, optional): treat a cached copy older than
+   this as a miss. locked: the caller holds the script lock. Only a lock holder may refill the cache from the
+   Sheet (an unlocked reader that did so could overwrite a fresher copy a moment later), so an unlocked reader
+   that misses tries for the lock without waiting and otherwise just reads the Sheet.
+   Returns db = { map, order, rowOf, cached, born }. */
+function bndRead_(useCache, maxAge, locked) {
+  var got = useCache ? bndCacheGet_() : null;
+  var rows, born = 0, cached = false, lastRow = 0;
+  if (got && (!maxAge || Date.now() - got.born < maxAge)) { rows = got.rows; born = got.born; cached = true; lastRow = got.lastRow; }
   else {
-    var vals = bndSheet_().getDataRange().getValues();
-    rows = [];
-    for (var i = 1; i < vals.length; i++) if (vals[i][0]) rows.push([String(vals[i][0]), String(vals[i][1])]);
-    bndCachePut_(rows);
+    var lock = null;
+    if (!locked) { try { lock = LockService.getScriptLock(); if (!lock.tryLock(300)) lock = null; } catch (e) { lock = null; } }
+    try {
+      rows = bndReadSheet_();
+      born = Date.now();
+      lastRow = rows.lastRow;
+      if (lock) bndCachePut_(rows, born, lastRow);   // a locked caller's flush puts it (dirty) once, below
+    } finally { if (lock) lock.releaseLock(); }
   }
-  var db = { map: {}, order: [], rowOf: {} };
+  var db = { map: {}, order: [], rowOf: {}, cached: cached, born: born, lastRow: Math.max(lastRow || 0, rows.length + 1), dirty: !cached && !!locked };
   rows.forEach(function (r, i) { db.map[r[0]] = JSON.parse(r[1]); db.order.push(r[0]); db.rowOf[r[0]] = i + 2; });
   return db;
 }
 
-/* The cache holds 100 KB per key, so a big game is stored in chunks. */
-function bndCachePut_(rows) {
+/* The cache holds 100 KB per key, so the store is kept in chunks. Each put uses a fresh version id in the
+   chunk keys, and the index names that version, so a reader can never stitch chunks from two different puts. */
+function bndCachePut_(rows, born, lastRow) {
+  var cache = null, oldIx = null;
   try {
-    var str = JSON.stringify(rows), size = 90000, parts = {}, n = Math.ceil(str.length / size) || 1;
-    for (var i = 0; i < n; i++) parts[BND_CACHE_KEY + ':' + i] = str.slice(i * size, (i + 1) * size);
-    parts[BND_CACHE_KEY] = String(n);
-    CacheService.getScriptCache().putAll(parts, 20);
-  } catch (e) { /* cache unavailable: reads fall back to the sheet */ }
+    cache = CacheService.getScriptCache();
+    try { oldIx = JSON.parse(cache.get(BND_CACHE_KEY) || 'null'); } catch (e0) { oldIx = null; }
+    var ver = String(born || Date.now()) + '-' + Math.floor(Math.random() * 1e6);
+    // 100 KB per value is measured in bytes: Thai text is 3 bytes a character, so chunk at 30 000 characters
+    var str = JSON.stringify(rows), size = 30000, parts = {}, n = 0, at = 0;
+    while (at < str.length || n === 0) {
+      var end = Math.min(str.length, at + size);
+      var c = str.charCodeAt(end - 1);
+      if (end < str.length && c >= 0xD800 && c <= 0xDBFF) end--;   // never split an emoji's surrogate pair
+      parts[BND_CACHE_KEY + ':' + ver + ':' + n] = str.slice(at, end);
+      at = end; n++;
+    }
+    parts[BND_CACHE_KEY] = JSON.stringify({ n: n, ver: ver, born: born || Date.now(), lastRow: lastRow || (rows.length + 1) });
+    cache.putAll(parts, BND_CACHE_TTL);
+    // drop the previous version's chunks so the shared cache is not filled with dead copies
+    if (oldIx && oldIx.ver && oldIx.ver !== ver && oldIx.n) {
+      var dead = [];
+      for (var j = 0; j < oldIx.n; j++) dead.push(BND_CACHE_KEY + ':' + oldIx.ver + ':' + j);
+      try { cache.removeAll(dead); } catch (e3) { /* ignore */ }
+    }
+  } catch (e) {
+    // a failed put must not leave an old copy in place
+    try { if (typeof console !== 'undefined') console.error('bndCachePut_ failed: ' + e); } catch (e1) { /* ignore */ }
+    try { (cache || CacheService.getScriptCache()).remove(BND_CACHE_KEY); } catch (e2) { /* ignore */ }
+  }
 }
 function bndCacheGet_() {
   try {
     var cache = CacheService.getScriptCache();
-    var n = Number(cache.get(BND_CACHE_KEY));
-    if (!n) return null;
+    var ix = cache.get(BND_CACHE_KEY);
+    if (!ix) return null;
+    ix = JSON.parse(ix);
+    if (!ix || !ix.n || !ix.ver) return null;
     var keys = [];
-    for (var i = 0; i < n; i++) keys.push(BND_CACHE_KEY + ':' + i);
+    for (var i = 0; i < ix.n; i++) keys.push(BND_CACHE_KEY + ':' + ix.ver + ':' + i);
     var got = cache.getAll(keys), str = '';
-    for (i = 0; i < n; i++) { if (got[keys[i]] === undefined || got[keys[i]] === null) return null; str += got[keys[i]]; }
-    return str;
+    for (i = 0; i < ix.n; i++) { if (got[keys[i]] === undefined || got[keys[i]] === null) return null; str += got[keys[i]]; }
+    var rows = JSON.parse(str);
+    if (!rows || (!rows.length && ix.n > 1)) return null;
+    return { rows: rows, born: Number(ix.born) || 0, lastRow: Number(ix.lastRow) || (rows.length + 1) };
   } catch (e) { return null; }
 }
+function bndCacheDrop_() {
+  try { CacheService.getScriptCache().remove(BND_CACHE_KEY); } catch (e) { /* ignore */ }
+}
 
+/* One row per write. A new key goes on the row after the last known one (writes are serialised by the lock,
+   so the in-memory order matches the sheet); getLastRow() is checked only if the two disagree. */
 function bndWrite_(db, key, obj) {
   var sh = bndSheet_();
   var row = [key, JSON.stringify(obj), new Date().toISOString()];
   if (db.rowOf[key]) sh.getRange(db.rowOf[key], 1, 1, 3).setValues([row]);
-  else { sh.appendRow(row); db.order.push(key); db.rowOf[key] = sh.getLastRow(); }
+  else {
+    var r = Math.max(db.order.length + 2, (db.lastRow || 0) + 1);
+    sh.getRange(r, 1, 1, 3).setValues([row]);
+    db.order.push(key); db.rowOf[key] = r; db.lastRow = r;
+  }
   db.map[key] = obj;
   db.dirty = true;
 }
 
 function bndFlushCache_(db) {
   if (!db.dirty) return;
-  bndCachePut_(db.order.map(function (k) { return [k, JSON.stringify(db.map[k])]; }));
+  bndCachePut_(db.order.map(function (k) { return [k, JSON.stringify(db.map[k])]; }), Date.now(), db.lastRow);
 }
 
 function bndWithLock_(fn) {
   var lock = LockService.getScriptLock();
-  lock.waitLock(20000);
+  if (!lock.tryLock(10000)) return { ok: false, error: 'The game is busy. Try again in a moment.', busy: true };
+  var db = null;
   try {
-    var db = bndRead_(false);
+    db = bndRead_(true, BND_CACHE_RECHECK, true);
     var out = fn(db);
+    SpreadsheetApp.flush();   // the rows must be in the Sheet before the next lock holder can read it
     bndFlushCache_(db);
     return out;
+  } catch (e) {
+    // the Sheet may now be ahead of the cache: make the next lock holder rebuild from the Sheet
+    if (db && db.dirty) { try { SpreadsheetApp.flush(); } catch (e1) { /* ignore */ } bndCacheDrop_(); }
+    throw e;
   } finally { lock.releaseLock(); }
 }
 
@@ -174,16 +242,17 @@ function bndSession_(db) { return db.map.session || null; }
 function bndNewSession_(req) {
   return bndWithLock_(function (db) {
     var sh = bndSheet_();
-    var old = bndSession_(db);
-    if (old && db.order.length) {
+    var real = db.cached ? bndRead_(false, 0, true) : db;   // archive what is really in the Sheet
+    var old = bndSession_(real) || bndSession_(db);
+    if (old && real.order.length) {
       var ss = bndSS_();
       var ar = ss.getSheetByName('Archive') || ss.insertSheet('Archive');
-      var rows = db.order.map(function (k) { return [old.id, k, JSON.stringify(db.map[k]), new Date().toISOString()]; });
+      var rows = real.order.map(function (k) { return [old.id, k, JSON.stringify(real.map[k]), new Date().toISOString()]; });
       ar.getRange(ar.getLastRow() + 1, 1, rows.length, 4).setValues(rows);
     }
     sh.clearContents();
     sh.getRange(1, 1, 1, 3).setValues([['key', 'json', 'updated']]);
-    db.map = {}; db.order = []; db.rowOf = {};
+    db.map = {}; db.order = []; db.rowOf = {}; db.cached = true; db.lastRow = 1; db.dirty = true;
     bndWrite_(db, 'session', bndBlankSession_(req.settings));
     return bndTeacherState_(db);
   });
@@ -287,14 +356,19 @@ function bndSaveIn_(db, sid, text, filed) {
   if (p.stage !== 'write') return { ok: false, error: 'You have already filed this round.' };
   var words = p.words;
   if (!words) return { ok: false, error: 'Roll the dice first.' };
+  var an = null;
   if (filed) {
-    var miss = bndCriteria_(bndAnalyse(text, words), s);
+    var a0 = bndAnalyse(text, words);
+    var miss = bndCriteria_(a0, s);
     if (miss.length) return { ok: false, error: 'Not yet: ' + miss.join(', ') + '.', missing: miss };
+    an = bndTrimAnalysis_(a0);
   }
   var key = bndPostKey_(p.round, sid);
   var old = db.map[key];
   if (!(old && old.text === text && !filed)) {
-    bndWrite_(db, key, { sid: sid, round: p.round, words: words, text: text, filed: filed, at: Date.now() });
+    var post = { sid: sid, round: p.round, words: words, text: text, filed: filed, at: Date.now() };
+    if (an) post.an = an;   // scored once at filing; bndScores_ never re-analyses a filed post
+    bndWrite_(db, key, post);
   }
   if (filed) {
     p.stage = 'check';
@@ -407,6 +481,11 @@ function bndExport_() {
   return { ok: true, rows: rows };
 }
 
+/* The part of bndAnalyse a filed post needs for scoring, stored on the post so the board never re-analyses. */
+function bndTrimAnalysis_(a) {
+  return { used: a.used, count: a.count, inRange: a.inRange, passive: a.passive, traps: a.traps.length, autoPts: a.autoPts };
+}
+
 /* ---------- scoring ----------
    Points for a filed post count at once; fact-check points arrive as other students check it;
    at Finish game, filed posts nobody checked get the benefit of the doubt. Each fact-check sent earns +1. */
@@ -427,7 +506,7 @@ function bndScores_(db) {
     if (k.indexOf('post:') !== 0) return;
     var p = db.map[k];
     if (!p.filed) return;
-    var a = bndAnalyse(p.text, p.words);
+    var a = p.an || bndTrimAnalysis_(bndAnalyse(p.text, p.words));   // posts filed before Nov 2026 carry no `an`
     var checks = checksByPost[k] || [];
     var peer = 0, stars = 0;
     if (checks.length) {
@@ -444,7 +523,7 @@ function bndScores_(db) {
     var front = !!s.front[k], spiked = !!s.spiked[k];
     var total = spiked ? 0 : a.autoPts + peer + stars + (front ? R.ptsFront : 0);
     posts[k] = { autoPts: a.autoPts, peerPts: peer, stars: stars, front: front, spiked: spiked, total: total,
-      count: a.count, inRange: a.inRange, passive: a.passive, used: a.used, traps: a.traps.length, checks: checks.length };
+      count: a.count, inRange: a.inRange, passive: a.passive, used: a.used, traps: a.traps, checks: checks.length };
     ptsBy[p.sid] = (ptsBy[p.sid] || 0) + total;
     filedBy[p.sid] = (filedBy[p.sid] || 0) + 1;
   });
@@ -463,19 +542,25 @@ function bndPublicSession_(s) {
   return { id: s.id, phase: s.phase, maxRounds: s.maxRounds, requirePassive: s.requirePassive };
 }
 
+/* Drafts (2 Nov 2026): a student's unfiled text lives in its own cache key for 6 h — no lock, no Sheet row —
+   so a draft sync costs the same as a plain poll. The browser keeps its own copy too; this one is for a student
+   who continues on another device. Filing writes the post row as before. */
+function bndDraftKey_(sid) { return 'bnd-draft:' + sid; }
+function bndDraftPut_(sid, round, words, text) {
+  try { CacheService.getScriptCache().put(bndDraftKey_(sid), JSON.stringify({ round: round, words: words, text: text }), 21600); } catch (e) { /* ignore */ }
+}
+function bndDraftGet_(sid, round) {
+  try {
+    var d = JSON.parse(CacheService.getScriptCache().get(bndDraftKey_(sid)) || 'null');
+    return d && d.round === round ? d.text : '';
+  } catch (e) { return ''; }
+}
 function bndStudentState_(req) {
   var sid = String(req.sid || '');
   var db = bndRead_(true);
   if (req.draft !== undefined && req.draft !== null) {
-    // piggy-backed autosave: only takes the lock when the text has changed
     var p0 = bndPlayer_(db, sid);
-    var old = p0 && db.map[bndPostKey_(p0.round, sid)];
-    if (p0 && p0.stage === 'write' && p0.words && (!old || old.text !== String(req.draft).slice(0, 2000))) {
-      return bndWithLock_(function (db2) {
-        bndSaveIn_(db2, sid, String(req.draft).slice(0, 2000), false);
-        return bndStudentView_(db2, sid);
-      });
-    }
+    if (p0 && p0.stage === 'write' && p0.words) bndDraftPut_(sid, p0.round, p0.words, String(req.draft).slice(0, 2000));
   }
   return bndStudentView_(db, sid);
 }
@@ -495,7 +580,7 @@ function bndStudentView_(db, sid) {
   out.round = p.round; out.stage = p.stage;
   out.words = p.words || null;
   var mine = db.map[bndPostKey_(p.round, sid)];
-  out.draft = mine && !mine.filed ? mine.text : '';
+  out.draft = mine && !mine.filed ? mine.text : (p.stage === 'write' && p.words ? bndDraftGet_(sid, p.round) : '');
   // her latest filed post and its score so far
   for (var r = p.round; r >= 1; r--) {
     var k = bndPostKey_(r, sid);

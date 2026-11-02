@@ -108,6 +108,12 @@ require('fs').mkdirSync(OUT, { recursive: true });
       }
       await S.setViewportSize({ width: 390, height: 844 });
       await S.fill('#post', good);
+      // the draft survives a reload from this browser's own copy, before any server sync
+      await S.waitForTimeout(100);
+      await S.reload();
+      await S.waitForSelector('#post', { timeout: 15000 });
+      const kept = await S.$eval('#post', t => t.value);
+      if (kept !== good) errors.push('draft lost on reload: ' + JSON.stringify(kept.slice(0, 40)));
     }
     if (await S.$eval('#file', b => b.disabled)) { errors.push('file locked for a good post: ' + good + ' / ' + await S.$eval('#must', u => u.innerText)); break; }
     await S.click('#file');

@@ -44,10 +44,10 @@ Each fact-check a student sends earns her +1. **Remove** in Players & posts sets
 4. Deploy → New deployment → Web app → Execute as **Me** → Who has access **Anyone** → Deploy, and authorise.
 5. Paste the `/exec` URL into `js/config.js` (`window.BND_API_URL = '…'`), bump the `?v=` in the HTML files, and push.
 
-After changing Code.gs: Deploy → Manage deployments → pencil → **New version** → Deploy.
+After changing Code.gs: Deploy → Manage deployments → pencil → **New version** → Deploy (Claude does this in the browser).
 Saving alone does not update the live URL.
 
-The game keeps everything in one sheet tab, `Store`. **New game** copies the old game to
+The game keeps everything in one sheet tab, `Store`, mirrored in the script cache (reads never touch the Sheet during a game; every write updates one row and refreshes the cache). **New game** copies the old game to
 `Archive` and clears `Store`.
 
 ## Demo mode
