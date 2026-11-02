@@ -12,8 +12,12 @@ var BND_GRACE_MS = 15000;          // late saves accepted this long after a time
 var BND_CACHE_KEY = 'bnd-store-v1';
 
 /* ---------- storage: one "Store" sheet of key | json | updated ---------- */
+/* SHEET_ID (in Roster.gs) points a standalone script at its Sheet; a script bound to the Sheet needs none. */
+function bndSS_() {
+  return (typeof SHEET_ID !== 'undefined' && SHEET_ID) ? SpreadsheetApp.openById(SHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
+}
 function bndSheet_() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = bndSS_();
   var sh = ss.getSheetByName('Store');
   if (!sh) {
     sh = ss.insertSheet('Store');
@@ -148,7 +152,7 @@ function bndNewSession_(req) {
     var sh = bndSheet_();
     var old = bndSession_(db);
     if (old && db.order.length) {
-      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var ss = bndSS_();
       var ar = ss.getSheetByName('Archive') || ss.insertSheet('Archive');
       var rows = db.order.map(function (k) { return [old.id, k, JSON.stringify(db.map[k]), new Date().toISOString()]; });
       ar.getRange(ar.getLastRow() + 1, 1, rows.length, 4).setValues(rows);

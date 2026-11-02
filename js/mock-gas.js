@@ -45,6 +45,7 @@
     };
   }
   g.SpreadsheetApp = {
+    openById: function () { return g.SpreadsheetApp.getActiveSpreadsheet(); },
     getActiveSpreadsheet: function () {
       return {
         getSheetByName: function (n) { return load()[n] ? sheet(n) : null; },

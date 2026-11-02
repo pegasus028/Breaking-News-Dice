@@ -32,7 +32,7 @@ at Results. **Remove** in Desks & posts sets a post to 0 points.
 
 1. Create a Google Sheet (e.g. *Breaking News Dice*). Extensions → Apps Script.
 2. Replace `Code.gs` with `apps-script/Code.gs` from this repo.
-3. Add a second script file `Roster.gs` with the private roster and the teacher PIN
+3. Add a second script file `Roster.gs` with the private roster, the teacher PIN and `SHEET_ID` (the Sheet’s id; leave it out if the script is bound to the Sheet)
    (not in this repo; T.Chris has the file). Change `TEACHER_PIN` before class.
 4. Deploy → New deployment → Web app → Execute as **Me** → Who has access **Anyone** → Deploy, and authorise.
 5. Paste the `/exec` URL into `js/config.js` (`window.BND_API_URL = '…'`), bump the `?v=` in the HTML files, and push.
