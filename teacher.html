@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Newsroom Board</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Fraunces:opsz,wght@9..144,600;9..144,900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/app.css?v=2026-11-02m">
+<link rel="stylesheet" href="css/app.css?v=2026-11-05a">
 </head>
 <body>
 <div class="tc">
   <header class="tc-top">
     <div class="tc-brand">Breaking<br>News Dice</div>
     <div class="tc-round" id="round"></div>
-    <div class="tc-timer" id="timer" aria-live="off"></div>
+    <div class="tc-timer" id="timer"></div>
     <div class="tc-ctrl" id="ctrl"></div>
   </header>
   <div id="flash" class="err hidden" role="alert" style="margin:10px 24px 0"></div>
@@ -24,6 +24,11 @@
       <div class="kicker">Satriwithaya · Live</div>
       <h1>Breaking News <em>Dice</em></h1>
       <div class="sub" id="arHint"></div>
+    </div>
+    <div class="ar-count ar-clock">
+      <div class="lab" id="arClockLab">Countdown</div>
+      <div class="big" id="arClock">--:--</div>
+      <div class="state" id="arClockState">Timer not started</div>
     </div>
     <div class="ar-count">
       <div class="lab">Posts filed</div>
@@ -47,7 +52,7 @@
       <div class="ar-panel ar-feed"><h3>Full standings</h3><div class="feedlist" id="arFeed"></div></div>
     </div>
   </div>
-  <div class="ar-ctrl" id="arCtrl"></div>
+  <div class="ar-bottom"><div class="ar-ctrl" id="arCtrl"></div><div class="ar-timerctl cd-ctl" id="arTimerCtl"></div></div>
 </section>
 <canvas id="arConfetti" class="ar-confetti"></canvas>
 <div class="ar-podium" id="arPodium" role="dialog" aria-modal="true" aria-label="Final standings">
@@ -63,15 +68,16 @@
     <button class="btn big primary">Open the board</button><p id="pinMsg" class="small" style="color:var(--alert)"></p></form>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="js/config.js?v=2026-11-02m"></script>
-<script src="js/words.js?v=2026-11-02m"></script>
-<script src="js/check.js?v=2026-11-02m"></script>
-<script src="js/mock-gas.js?v=2026-11-02m"></script>
-<script src="js/demo-settings.js?v=2026-11-02m"></script>
-<script src="js/server.js?v=2026-11-02m"></script>
-<script src="js/ui.js?v=2026-11-02m"></script>
-<script src="js/bots.js?v=2026-11-02m"></script>
-<script src="js/arena.js?v=2026-11-02m"></script>
-<script src="js/teacher.js?v=2026-11-02m"></script>
+<script src="js/config.js?v=2026-11-05a"></script>
+<script src="js/words.js?v=2026-11-05a"></script>
+<script src="js/check.js?v=2026-11-05a"></script>
+<script src="js/mock-gas.js?v=2026-11-05a"></script>
+<script src="js/demo-settings.js?v=2026-11-05a"></script>
+<script src="js/server.js?v=2026-11-05a"></script>
+<script src="js/ui.js?v=2026-11-05a"></script>
+<script src="js/bots.js?v=2026-11-05a"></script>
+<script src="js/countdown.js?v=2026-11-05a"></script>
+<script src="js/arena.js?v=2026-11-05a"></script>
+<script src="js/teacher.js?v=2026-11-05a"></script>
 </body>
 </html>

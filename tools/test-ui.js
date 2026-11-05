@@ -132,6 +132,24 @@ require('fs').mkdirSync(OUT, { recursive: true });
   if (fp) { await fp.click(); await T.waitForSelector('.cand.front', { timeout: 10000 }); }
   await T.waitForTimeout(1500);
   await T.screenshot({ path: OUT + '/t3-front.png' });
+  // countdown timer on the results screen: start, pause, +1 min, resume
+  await T.selectOption('#timer .cd-mins', '10');
+  await T.click('#timer [data-cd="start"]');
+  await T.waitForTimeout(1200);
+  const c1 = await T.$eval('#timer .cd-clock', e => e.textContent);
+  if (!/^(10:00|9:5\d)$/.test(c1)) errors.push('countdown did not start at 10:00: ' + c1);
+  await T.click('#timer [data-cd="pause"]');
+  const c2 = await T.$eval('#timer .cd-clock', e => e.textContent);
+  await T.waitForTimeout(1500);
+  if (await T.$eval('#timer .cd-clock', e => e.textContent) !== c2) errors.push('paused countdown kept running');
+  await T.click('#timer [data-cd="add"]');
+  const c3 = await T.$eval('#timer .cd-clock', e => e.textContent);
+  if (!/^1[01]:/.test(c3)) errors.push('+1 min did not add a minute: ' + c2 + ' -> ' + c3);
+  await T.click('#timer [data-cd="resume"]');
+  await T.reload();                                   // the clock survives a reload of the projector page
+  await T.waitForSelector('#timer .cd-clock', { timeout: 15000 });
+  if (!/^1[01]:|^10:/.test(await T.$eval('#timer .cd-clock', e => e.textContent))) errors.push('countdown lost on reload');
+  await T.screenshot({ path: OUT + '/t3c-timer.png' });
   // Arena view: top-3 cards, chasing pack, snapshot; End game from the arena shows the podium
   await T.click('button[data-a="arena"]');
   await T.waitForSelector('#arena:not(.hidden) .pcard.p1', { timeout: 10000 });
@@ -140,14 +158,22 @@ require('fs').mkdirSync(OUT, { recursive: true });
     bars: document.querySelectorAll('#arBars .ar-row').length, feed: document.querySelectorAll('#arFeed .row').length,
     players: Number(document.getElementById('kPlayers').textContent) }));
   if (arena.cards !== 3 || arena.bars < 3 || arena.feed !== arena.players) errors.push('arena view incomplete: ' + JSON.stringify(arena));
+  if (!/^1[01]:|^10:|^9:/.test(await T.$eval('#arClock', e => e.textContent))) errors.push('arena clock not showing the countdown');
+  if (!await T.$('#arTimerCtl [data-cd="pause"]')) errors.push('arena has no timer controls');
   await T.screenshot({ path: OUT + '/t3b-arena.png' });
   await T.click('#arCtrl button[data-ar="end"]');
   if (!/Click again/.test(await T.$eval('#arCtrl button[data-ar="end"]', b => b.textContent))) errors.push('arena End game is not two-click');
-  await T.click('#arCtrl button[data-ar="end"]');
+  // instead of the second click, let a 4-second countdown run out: "End game at 0:00" must end the game
+  await T.click('#arTimerCtl [data-cd="stop"]');
+  await T.evaluate(() => bndCountdown.start(4 / 60));
+  await T.waitForTimeout(2000);
+  const red = await T.$eval('#arClock', e => e.className);
+  if (!/danger/.test(red)) errors.push('clock not red in the last 30 s: ' + red);
   await T.waitForSelector('#arPodium.show', { timeout: 15000 });
   await T.waitForTimeout(1800);
   if ((await T.$$('#arPlinks .block')).length !== 3) errors.push('podium does not show three blocks');
   await T.screenshot({ path: OUT + '/t4-podium.png' });
+  if (!/Time's up/.test(await T.$eval('#arClock', e => e.textContent))) errors.push("clock does not say Time's up");
   await T.keyboard.press('Escape');
   if (await T.$('#arPodium.show')) errors.push('Esc does not close the podium');
   await T.click('#arCtrl button[data-ar="exit"]');

@@ -1,5 +1,14 @@
 # QA report
 
+## Teacher console: countdown timer — 5 November 2026 (Claude Opus 5.5)
+
+- New `js/countdown.js`: a countdown in the classic board header (beside "Live game") and in the Arena view header ("Time remaining", next to Posts filed), modelled on the Nominalization Arena clock.
+- Controls on both screens: minutes (3–30, default 10) → **⏱ Start timer**, then **Pause / Resume**, **+1 min**, **Stop**; **End game at 0:00** (ticked by default).
+- Amber under 1 minute, red pulse under 30 s; at 0:00 a buzzer plays, the clock reads "Time's up" and, if the box is ticked, the game ends (same idempotent `finish` action as End game), which opens the podium.
+- The clock is kept in this browser (`bnd-countdown`, keyed to the game id), so it survives a reload of the projector page; a new game clears it; ending the game early freezes it. Hidden with the other controls in "Hide controls" mode (the clock itself stays).
+- Front end only: Code.gs unchanged, no Apps Script redeploy. Cache `?v=2026-11-05a`.
+- Tests: ES5 parse; `tools/test-ui.js` NO PAGE ERRORS with new checks (start at 10:00, pause holds, +1 min, survives reload, arena clock and controls, red under 30 s, a 4-second countdown ends the game and opens the podium, "Time's up").
+
 ## Concurrency audit after the class failure (23 students) — 2 November 2026 (Claude Fable 5.1)
 
 **What went wrong in class.** Every student page polled the Apps Script backend every 3 s and sent her draft

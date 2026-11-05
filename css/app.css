@@ -398,3 +398,32 @@ body.arena-on { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .arena .pcard, .arena .pcard.p1, .arena .pcard.p1::after, .arena .crown, .ar-podium h2, .ar-podium .block, .ar-podium .pcol.winner .nm { animation: none !important; }
   .ar-row .bar, .ar-row .val { transition: none; } }
+
+/* ===== teacher countdown timer (classic header + Arena view) ===== */
+.tc-timer { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; font-size: 16px; min-width: 0; }
+.tc-timer .cd-lab { font-family: var(--body); font-weight: 700; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.tc-timer .cd-clock { font-family: var(--display); font-weight: 800; font-size: 56px; line-height: .95; font-variant-numeric: tabular-nums; }
+.tc-timer.warn .cd-clock { color: #b07a00; }
+.tc-timer.danger .cd-clock, .tc-timer.up .cd-clock { color: var(--alert); }
+.tc-timer.danger .cd-clock { animation: cdPulse .9s ease-in-out infinite; }
+.tc-timer.paused .cd-clock { opacity: .55; }
+.cd-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.cd-ctl .cd-mins, .cd-ctl .cd-btn { font: 700 16px var(--body); min-height: 40px; padding: 4px 12px; border: 2px solid var(--ink); border-radius: 999px; background: var(--paper); color: var(--ink); cursor: pointer; }
+.cd-ctl .cd-btn.go { background: var(--ink); color: var(--paper); }
+.cd-ctl .cd-auto { font-size: 14px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.cd-ctl .cd-auto input { width: 20px; height: 20px; }
+body.clean .tc-timer .cd-ctl { display: none; }
+@keyframes cdPulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+/* Arena */
+.ar-top .ar-clock { margin-left: auto; }
+.ar-count .big.warn { color: var(--a-gold); }
+.ar-count .big.danger, .ar-count .big.up { color: #e0573f; }
+.ar-count .big.danger { animation: cdPulse .9s ease-in-out infinite; }
+.ar-count .big.up { font-size: 46px; }
+.ar-bottom { display: flex; flex-wrap: wrap; align-items: center; gap: 9px 16px; margin-top: 12px; flex: 0 0 auto; }
+.ar-bottom .ar-ctrl { margin-top: 0; flex: 1 1 auto; }
+.ar-timerctl .cd-mins, .ar-timerctl .cd-btn { font-family: 'Fraunces', serif; font-weight: 900; font-size: 15px; min-height: 44px; border: 2px solid var(--a-gold); border-radius: 9px; background: transparent; color: var(--a-gold); }
+.ar-timerctl .cd-btn.go { background: var(--a-gold); color: var(--a-ink); }
+.ar-timerctl .cd-mins option { color: #1a1410; }
+.ar-timerctl .cd-auto { color: var(--a-paper); font-family: 'Space Mono', monospace; font-size: 12px; }
+@media (prefers-reduced-motion: reduce) { .tc-timer.danger .cd-clock, .ar-count .big.danger { animation: none; } }

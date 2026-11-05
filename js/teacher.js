@@ -67,7 +67,6 @@
     var c = t && t.counts;
     $('round').innerHTML = s ? (s.phase === 'final' ? 'Game over' : 'Live game') +
       '<span class="ph">' + (s.phase === 'final' ? 'Final scores' : c ? c.players + ' playing · ' + c.filed + ' posts filed' : '') + '</span>' : 'No game yet';
-    $('timer').textContent = '';
     var b = [];
     if (s && s.phase === 'open') b.push(['finish', 'End game', 'alert']);
     if (s && s.phase === 'final') b.push(['podium', '🏆 Podium', 'primary'], ['export', 'Download results', 'primary'], ['new', 'New game', '']);
@@ -100,6 +99,7 @@
     renderStage();
     if (drawerOpen) renderDrawer();
     bndArena.update(setupMode ? null : t);
+    bndCountdown.update(setupMode ? null : t);
   }
 
   function studentUrl() {
@@ -314,6 +314,7 @@
   });
 
   /* ---------------- start ---------------- */
+  bndCountdown.init({ finish: function () { call({ action: 'finish' }).then(function () { ctrlSig = ''; renderTop(); }); } });
   bndArena.init({ call: call, armed: armed, exportCsv: exportCsv, studentUrl: studentUrl,
     onToggle: function () { ctrlSig = ''; renderTop(); } });
   if (BND_LIVE && !pin) showGate(false); else poll();

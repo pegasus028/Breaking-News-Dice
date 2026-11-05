@@ -23,6 +23,7 @@ post, next round. The teacher board on the projector shows a live leaderboard (w
      then the next round starts straight away. More rounds = more points.
 4. The board shows the leaderboard and the best fact-checked posts: tap **Front Page** (+5) any time.
 5. **End game** (click twice) ends play, gives unchecked posts the benefit of the doubt and shows the podium.
+   **⏱ Countdown** in the header and in the Arena view: pick minutes, Start, Pause/Resume, +1 min, Stop; at 0:00 it buzzes and (box ticked) ends the game and opens the podium.
    **🏆 Arena view** is the dark Arena-style board (top-3 cards with a crown, the chasing pack as bars, class snapshot, full standings) with its own **End game & show podium**; the podium has rising blocks, confetti and a crowd cheer (Mute, Close or Esc).
    **Download results** saves every post and each student's totals as CSV; **New game** archives this game.
 
